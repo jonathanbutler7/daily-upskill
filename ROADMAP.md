@@ -1,27 +1,27 @@
 # Skill Roadmap (2026)
 
-## Python (Weeks 1-4)
-- [ ] Advanced comprehensions & iterators
-- [ ] Decorators & context managers
-- [ ] Typing + pydantic
-- [ ] Asyncio basics
+## Python Foundations for DE/ML (Weeks 1-4)
+- [x] Practical data transformations (comprehensions & generators)
+- [ ] Robust code with typing & pydantic (for data validation)
+- [ ] Efficient data handling with context managers & file I/O
+- [ ] Functional patterns for data pipelines (map, filter, reduce)
 
-## ML (Weeks 5-8)
-- [ ] Hugging Face fine-tuning
-- [ ] Evaluation metrics
-- [ ] LoRA / QLoRA
-- [ ] Vector DB basics
+## ML Foundations (Weeks 5-8)
+- [ ] Practical Hugging Face usage (inference & basic fine-tuning)
+- [ ] Essential evaluation metrics for ML models
+- [ ] Understanding model optimization (LoRA/QLoRA)
+- [ ] Vector DB basics for RAG applications
 
-## Data Engineering (Weeks 9-12)
-- [ ] Polars + DuckDB pipelines
-- [ ] Airflow DAGs (tiny)
-- [ ] dbt basics
-- [ ] Spark mini-examples
+## Data Engineering Foundations (Weeks 9-12)
+- [ ] Modern data pipelines with Polars + DuckDB
+- [ ] Orchestration basics with tiny Airflow DAGs
+- [ ] Structured data modeling with dbt
+- [ ] Distributed data processing with Spark mini-examples
 
-## System Design (Weeks 13-16)
-- [ ] Caching strategies
-- [ ] Rate limiting
-- [ ] Distributed systems patterns
-- [ ] Observability
+## System Design Foundations (Weeks 13-16)
+- [ ] Caching strategies for large datasets
+- [ ] Practical rate limiting for API interactions
+- [ ] Essential patterns for distributed systems
+- [ ] Observability for production data pipelines
 
 Mark done when you have a working exercise + SKILL.md entry.

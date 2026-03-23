@@ -21,8 +21,15 @@ The user is a Software Engineer at Weave for 5 years, who transitioned from bein
 - When the user asks for a task from `ROADMAP.md`:
   - Identify the task and the corresponding `SKILL.md`.
   - Briefly explain the core concept and suggest a relevant YouTube video or tutorial.
-    - **Note**: Always verify the link is active and the video is available before sending it (e.g., using `curl` to check for a 200 OK and ensuring it doesn't contain "This video isn't available anymore" or "not available" in the page content).
+    - **Note**: Always verify the link is active and the video is available before sending it using the `youtube` MCP server.
   - Suggest a small, concrete exercise for the user to implement in a file like `exercises/YYYY-MM-DD_task_name.py`.
   - Provide a skeleton (imports, function signatures) but leave the core logic to the user.
   - Ask the user to let you know once they've made an attempt or if they get stuck.
-  - After the exercise is done, ensure the duration is logged in `SKILLS_TRACKER.md`.
+
+### Wrap Up & Feedback
+- After the user provides their solution:
+  - **Review the Code**: Take a look at the code the user wrote. Give feedback on readability, idiomatic Python (PEP 8), and efficiency.
+  - **Identify Improvements**: Suggest specific ways the code could be improved or refactored.
+  - **Contextualize**: Explain how their solution fits into the broader concept of the `SKILL.md` and how it might be used in a professional setting.
+  - **Log Progress**: Ensure the duration is logged in `SKILLS_TRACKER.md`.
+  - **Commit and push**: Add the files that are in source control and commit to git using a sensible commit message

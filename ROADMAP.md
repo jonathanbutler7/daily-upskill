@@ -3,7 +3,7 @@
 ## Python Foundations for DE/ML (Weeks 1-4)
 - [x] Practical data transformations (comprehensions & generators)
 - [x] Robust code with typing & pydantic (for data validation)
-- [ ] Efficient data handling with context managers & file I/O
+- [x] Efficient data handling with context managers & file I/O
 - [ ] Functional patterns for data pipelines (map, filter, reduce)
 
 ## ML Foundations (Weeks 5-8)

@@ -4,7 +4,7 @@
 - [x] Practical data transformations (comprehensions & generators)
 - [x] Robust code with typing & pydantic (for data validation)
 - [x] Efficient data handling with context managers & file I/O
-- [ ] Functional patterns for data pipelines (map, filter, reduce)
+- [x] Functional patterns for data pipelines (map, filter, reduce)
 
 ## ML Foundations (Weeks 5-8)
 - [ ] Practical Hugging Face usage (inference & basic fine-tuning)

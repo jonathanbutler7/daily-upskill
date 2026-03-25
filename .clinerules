@@ -5,7 +5,7 @@ The user is a Software Engineer at Weave for 5 years, who transitioned from bein
 
 ### How the User Learns Best:
 - **Small, Bite-sized Examples**: Real-world scenarios (DE/ML focus) are more effective than abstract concepts.
-- **Visuals over Documentation**: They prefer video content (YouTube) and practical application over long documentation reads.
+- **Conciseness over Documentation**: They prefer concise content and practical application over long documentation reads.
 - **Hands-on practice**: They need to type the code themselves (starting from a skeleton) to build muscle memory and true understanding.
 - **Duration Tracking**: They aim for 15+ minutes and want to track the time spent on each exercise.
 
@@ -20,9 +20,8 @@ The user is a Software Engineer at Weave for 5 years, who transitioned from bein
 ## Daily Workflow for Exercises
 - When the user asks for a task from `ROADMAP.md`:
   - Identify the task and the corresponding `SKILL.md`.
-  - Briefly explain the core concept and suggest a relevant YouTube video or tutorial.
-    - **Note**: Always verify the link is active and the video is available before sending it using the `youtube` MCP server.
-  - Suggest a small, concrete exercise for the user to implement in a file like `exercises/YYYY-MM-DD_task_name.py`.
+  - Briefly explain the core concept.
+  - Suggest a small, concrete exercise for the user to implement in a file like `exercises/taskname_YYMMDD.py`.
   - Provide a skeleton (imports, function signatures) but leave the core logic to the user.
   - Ask the user to let you know once they've made an attempt or if they get stuck.
 

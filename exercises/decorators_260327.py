@@ -29,14 +29,12 @@ def retry(max_retries=3):
             # 5. If it reaches the final retry and still fails, raise the exception
             for i in range(max_retries):
                 try:
-                    result = func(*args, **kwargs)
-                    return result
+                    return func(*args, **kwargs)
                 except Exception as e:
                     if i == max_retries - 1:
                         print("Failed!")
                         raise e
                     print("Failed, retrying...")
-            return result
         return wrapper
     
     return decorator

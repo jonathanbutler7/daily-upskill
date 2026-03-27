@@ -1,27 +1,46 @@
 # Skill Roadmap (2026)
 
-## Python Foundations for DE/ML (Weeks 1-4)
-- [x] Practical data transformations (comprehensions & generators)
-- [x] Robust code with typing & pydantic (for data validation)
-- [x] Efficient data handling with context managers & file I/O
-- [x] Functional patterns for data pipelines (map, filter, reduce)
+## Module 1: Python Foundations (Completed)
+- [x] Using comprehensions & generators for memory-efficient data processing
+- [x] Validating data boundaries with typing and Pydantic
+- [x] Managing resources efficiently using context managers and file I/O
+- [x] Writing cleaner data pipelines using map, filter, and reduce
+- [ ] Writing decorators for reusable logic (logging, metrics, retries)
+- [ ] Using Protocols for structural typing (Go-style interfaces in Python)
+- [ ] Testing service interactions using pytest fixtures and mocks
 
-## ML Foundations (Weeks 5-8)
-- [ ] Practical Hugging Face usage (inference & basic fine-tuning)
-- [ ] Essential evaluation metrics for ML models
-- [ ] Understanding model optimization (LoRA/QLoRA)
-- [ ] Vector DB basics for RAG applications
+## Module 2: ML Engineering & Tools
+- [ ] Standardizing Hugging Face inference using Pydantic BaseModels
+- [ ] Implementing a reusable ModelEvaluator class for common metrics
+- [ ] Comparing LoRA fine-tuning vs. prompt engineering (technical brief)
+- [ ] Building a multi-tenant vector DB retrieval interface for RAG
+- [ ] Versioning and templating prompts for A/B testing
+- [ ] Running quantized models (GGUF/AWQ) for cheaper, faster inference
+- [ ] Setting up CI/CD tests for model accuracy and latency regressions
 
-## Data Engineering Foundations (Weeks 9-12)
-- [ ] Modern data pipelines with Polars + DuckDB
-- [ ] Orchestration basics with tiny Airflow DAGs
-- [ ] Structured data modeling with dbt
-- [ ] Distributed data processing with Spark mini-examples
+## Module 3: Data Engineering & Architecture
+- [ ] Enforcing data contracts across services using Polars, DuckDB, and Pydantic
+- [ ] Writing reusable Airflow operators for common team tasks
+- [ ] Creating shared dbt macros for cross-team data validation
+- [ ] Configuring cost-efficient Spark jobs (best practices guide)
+- [ ] Building resilient Kafka/RabbitMQ consumers with dead-letter queues
+- [ ] Serving high-performance data APIs using FastAPI and Pydantic
+- [ ] Implementing automated data retention and archival in Python
 
-## System Design Foundations (Weeks 13-16)
-- [ ] Caching strategies for large datasets
-- [ ] Practical rate limiting for API interactions
-- [ ] Essential patterns for distributed systems
-- [ ] Observability for production data pipelines
+## Module 4: System Design & Backend Patterns
+- [ ] Building a shared Redis wrapper with automatic serialization
+- [ ] Implementing token-bucket rate limiting middleware
+- [ ] Standardizing cross-service logging and tracing decorators
+- [ ] Writing Technical Decision Records (TDRs) for multi-quarter planning
+- [ ] Adding circuit breakers and bulkheads to prevent cascading failures
+- [ ] Auditing and optimizing cloud resource usage in Python services
+- [ ] Standardizing secrets management and IAM role handling
+
+## Technical Leadership & Mentorship (Ongoing)
+- [ ] Conducting code reviews that establish standards and mentor peers
+- [ ] Auditing architecture to identify cross-team friction points
+- [ ] Creating code skeletons to speed up junior engineer onboarding
+- [ ] Leading RFC discussions for high-impact architectural changes
+- [ ] Identifying and addressing technical skill gaps across teams
 
 Mark done when you have a working exercise + SKILL.md entry.

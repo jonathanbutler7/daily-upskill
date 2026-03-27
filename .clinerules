@@ -19,9 +19,10 @@ The user is a Software Engineer at Weave for 5 years, who transitioned from bein
 
 ## Daily Workflow for Exercises
 - When the user asks for a task from `ROADMAP.md`:
-  - Identify the task and the corresponding `SKILL.md`.
+  - Identify the task and ensure a corresponding `SKILL.md` file exists in the `skills/` directory (create it if missing).
+  - **Important:** Each time we do an exercise, there MUST be a file added/present in the `skills/` dir and a new file in the `exercises/` dir. NEVER delete a file in `skills/` when adding one to `exercises/`.
   - Briefly explain the core concept.
-  - Suggest a small, concrete exercise for the user to implement in a file like `exercises/taskname_YYMMDD.py`.
+  - Suggest a small, concrete exercise for the user to implement by creating a new file like `exercises/taskname_YYMMDD.py`.
   - Provide a skeleton (imports, function signatures) but leave the core logic to the user.
   - Ask the user to let you know once they've made an attempt or if they get stuck.
 

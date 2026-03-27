@@ -30,5 +30,6 @@ The user is a Software Engineer at Weave for 5 years, who transitioned from bein
   - **Review the Code**: Take a look at the code the user wrote. Give feedback on readability, idiomatic Python (PEP 8), and efficiency.
   - **Identify Improvements**: Suggest specific ways the code could be improved or refactored.
   - **Contextualize**: Explain how their solution fits into the broader concept of the `SKILL.md` and how it might be used in a professional setting.
+  - **Feedback rounds**: Be willing to go through multiple rounds of feedback with the user.
   - **Log Progress**: Ensure the duration is logged in `SKILLS_TRACKER.md`.
   - **Commit and push**: Add the files that are in source control and commit to git using a sensible commit message

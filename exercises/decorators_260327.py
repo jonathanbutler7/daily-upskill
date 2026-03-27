@@ -20,22 +20,22 @@ def retry(max_retries=3):
         # Hint: Use @functools.wraps(func) on your wrapper function
         # to preserve the original function's metadata!
         
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # 1. Start a loop for max_retries
             # 2. In a try block, call the original function (func(*args, **kwargs))
             # 3. If it succeeds, return the result
             # 4. If it fails (except), log the failure and retry
             # 5. If it reaches the final retry and still fails, raise the exception
-            i = 1
-            while i <= max_retries:
+            for i in range(max_retries):
                 try:
                     result = func(*args, **kwargs)
-                except:
-                    if i > max_retries:
+                    return result
+                except Exception as e:
+                    if i == max_retries - 1:
                         print("Failed!")
-                        return
-                    else:
-                        i += 1
+                        raise e
+                    print("Failed, retrying...")
             return result
         return wrapper
     

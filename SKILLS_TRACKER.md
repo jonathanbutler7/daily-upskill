@@ -8,5 +8,6 @@
 | 2026-03-24 | Python Foundations| exercises/context_managers_260324.py | Used context managers and DictReader for memory-efficient file I/O. (11 mins) |
 | 2026-03-25 | Python Foundations| exercises/functional_patterns_260325.py | Chained map, filter, and reduce for processing experiment data. (15 mins) |
 | 2026-03-27 | Python Foundations| exercises/decorators_260327.py | Built a generic retry decorator with arguments and metadata preservation. (30 mins) |
+| 2026-03-30 | Python Foundations| exercises/testing_mocks260330.py| Tested service interactions using pytest fixtures and MagicMock. (45 mins) |
 
 <!-- AI will append new rows every day -->

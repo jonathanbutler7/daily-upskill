@@ -1,5 +1,15 @@
 # Skill Roadmap (2026)
 
+## Table of Contents
+
+- [Module 1: Python Foundations](#module-1-python-foundations-completed) ✅
+- [Module 2: ML Engineering & Tools](#module-2-ml-engineering--tools)
+- [Module 3: Data Engineering & Architecture](#module-3-data-engineering--architecture)
+- [Module 4: System Design & Backend Patterns](#module-4-system-design--backend-patterns)
+- [Module 5: Technical Leadership & Mentorship](#module-5-technical-leadership--mentorship-ongoing)
+
+---
+
 ## Module 1: Python Foundations (Completed)
 - [x] Using comprehensions & generators for memory-efficient data processing
 - [x] Validating data boundaries with typing and Pydantic
@@ -7,8 +17,10 @@
 - [x] Writing cleaner data pipelines using map, filter, and reduce
 - [x] Writing decorators for reusable logic (logging, metrics, retries)
 - [x] Using Protocols for structural typing (Go-style interfaces in Python)
-- [ ] Testing service interactions using pytest fixtures and mocks
-- [ ] **Module 1 Quiz & Knowledge Check**
+- [x] Testing service interactions using pytest fixtures and mocks
+- [x] **Module 1 Quiz & Knowledge Check**
+
+---
 
 ## Module 2: ML Engineering & Tools
 - [ ] Standardizing Hugging Face inference using Pydantic BaseModels
@@ -20,6 +32,8 @@
 - [ ] Setting up CI/CD tests for model accuracy and latency regressions
 - [ ] **Module 2 Quiz & Knowledge Check**
 
+---
+
 ## Module 3: Data Engineering & Architecture
 - [ ] Enforcing data contracts across services using Polars, DuckDB, and Pydantic
 - [ ] Writing reusable Airflow operators for common team tasks
@@ -29,6 +43,8 @@
 - [ ] Serving high-performance data APIs using FastAPI and Pydantic
 - [ ] Implementing automated data retention and archival in Python
 - [ ] **Module 3 Quiz & Knowledge Check**
+
+---
 
 ## Module 4: System Design & Backend Patterns
 - [ ] Building a shared Redis wrapper with automatic serialization
@@ -40,6 +56,8 @@
 - [ ] Standardizing secrets management and IAM role handling
 - [ ] **Module 4 Quiz & Knowledge Check**
 
+---
+
 ## Module 5: Technical Leadership & Mentorship (Ongoing)
 - [ ] Conducting code reviews that establish standards and mentor peers
 - [ ] Auditing architecture to identify cross-team friction points
@@ -48,4 +66,6 @@
 - [ ] Identifying and addressing technical skill gaps across teams
 - [ ] **Module 5 Quiz & Knowledge Check**
 
-Mark done when you have a working exercise + SKILL.md entry.
+---
+
+Mark done when you have a working exercise + concept file entry.

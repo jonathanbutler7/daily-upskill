@@ -9,5 +9,8 @@
 | 2026-03-25 | Python Foundations| exercises/functional_patterns_260325.py | Chained map, filter, and reduce for processing experiment data. (15 mins) |
 | 2026-03-27 | Python Foundations| exercises/decorators_260327.py | Built a generic retry decorator with arguments and metadata preservation. (30 mins) |
 | 2026-03-30 | Python Foundations| exercises/testing_mocks260330.py| Tested service interactions using pytest fixtures and MagicMock. (45 mins) |
+| 2026-04-02 | Python Foundations| module_1_quiz.ipynb| Worked on quiz questions (20 minutes) |
+| 2026-04-03 | Python Foundations| module_1_quiz.ipynb| Worked on quiz questions (25 minutes) |
+| 2026-04-04 | Python Foundations| module_1_quiz.ipynb| Worked on quiz questions (30 minutes) |
 
 <!-- AI will append new rows every day -->

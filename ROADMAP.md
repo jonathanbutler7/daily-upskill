@@ -6,7 +6,7 @@
 - [Module 2: ML Engineering & Tools](#module-2-ml-engineering--tools)
 - [Module 3: Data Engineering & Architecture](#module-3-data-engineering--architecture)
 - [Module 4: System Design & Backend Patterns](#module-4-system-design--backend-patterns)
-- [Module 5: Technical Leadership & Mentorship](#module-5-technical-leadership--mentorship-ongoing)
+- [Module 5: Capstone Project](#module-5-capstone-project)
 
 ---
 
@@ -23,48 +23,59 @@
 ---
 
 ## Module 2: ML Engineering & Tools
+> Builds on: Module 1 — Pydantic, Protocols, decorators, pytest
+
 - [ ] Standardizing Hugging Face inference using Pydantic BaseModels
 - [ ] Implementing a reusable ModelEvaluator class for common metrics
-- [ ] Comparing LoRA fine-tuning vs. prompt engineering (technical brief)
-- [ ] Building a multi-tenant vector DB retrieval interface for RAG
+- [ ] Benchmarking model configurations using functional pipelines and Pydantic result models
+- [ ] Building a multi-tenant vector DB retrieval interface using Protocols for RAG
 - [ ] Versioning and templating prompts for A/B testing
-- [ ] Running quantized models (GGUF/AWQ) for cheaper, faster inference
-- [ ] Setting up CI/CD tests for model accuracy and latency regressions
+- [ ] Wrapping quantized model inference (GGUF/AWQ) behind a Protocol-based interface with Pydantic I/O schemas
+- [ ] Setting up CI/CD tests for model accuracy and latency regressions using pytest fixtures
 - [ ] **Module 2 Quiz & Knowledge Check**
 
 ---
 
 ## Module 3: Data Engineering & Architecture
+> Builds on: Modules 1–2 — Pydantic data contracts, Protocol-based model interfaces, functional pipelines
+
 - [ ] Enforcing data contracts across services using Polars, DuckDB, and Pydantic
-- [ ] Writing reusable Airflow operators for common team tasks
-- [ ] Creating shared dbt macros for cross-team data validation
-- [ ] Configuring cost-efficient Spark jobs (best practices guide)
-- [ ] Building resilient Kafka/RabbitMQ consumers with dead-letter queues
+- [ ] Writing reusable Airflow operators using decorators and context managers
+- [ ] Building a typed validation pipeline for ML model outputs using Pydantic and Polars
+- [ ] Processing ML batch inference outputs stream-style using generators and Pydantic schemas
+- [ ] Building resilient Kafka/RabbitMQ consumers with dead-letter queues using retry decorators
 - [ ] Serving high-performance data APIs using FastAPI and Pydantic
-- [ ] Implementing automated data retention and archival in Python
+- [ ] Implementing automated data retention and archival using context managers
 - [ ] **Module 3 Quiz & Knowledge Check**
 
 ---
 
 ## Module 4: System Design & Backend Patterns
+> Builds on: Modules 1–3 — decorators, context managers, Protocols, Pydantic, FastAPI, data pipelines
+
 - [ ] Building a shared Redis wrapper with automatic serialization
-- [ ] Implementing token-bucket rate limiting middleware
-- [ ] Standardizing cross-service logging and tracing decorators
-- [ ] Writing Technical Decision Records (TDRs) for multi-quarter planning
+- [ ] Implementing token-bucket rate limiting as decorator-based middleware
+- [ ] Standardizing cross-service logging and tracing using decorators
+- [ ] Designing a composable ML serving system using Protocols, Pydantic, and decorator-based middleware
 - [ ] Adding circuit breakers and bulkheads to prevent cascading failures
-- [ ] Auditing and optimizing cloud resource usage in Python services
-- [ ] Standardizing secrets management and IAM role handling
+- [ ] Profiling an ML inference and data pipeline end-to-end using decorator-based timing and functional metrics aggregation
+- [ ] Implementing a safe secrets manager using the context manager pattern with Protocol-based credential providers
 - [ ] **Module 4 Quiz & Knowledge Check**
 
 ---
 
-## Module 5: Technical Leadership & Mentorship (Ongoing)
-- [ ] Conducting code reviews that establish standards and mentor peers
-- [ ] Auditing architecture to identify cross-team friction points
-- [ ] Creating code skeletons to speed up junior engineer onboarding
-- [ ] Leading RFC discussions for high-impact architectural changes
-- [ ] Identifying and addressing technical skill gaps across teams
-- [ ] **Module 5 Quiz & Knowledge Check**
+## Module 5: Capstone Project
+> Builds on: Modules 1–4 — full synthesis of all skills into one production-ready system
+
+*Build a production-ready ML data pipeline end-to-end. Each part is a standalone exercise that requires skills from the specified prior modules.*
+
+- [ ] **Part 1 — Typed ingestion layer**: read raw input data with context managers and validate with Pydantic data contracts *(M1)*
+- [ ] **Part 2 — ML inference layer**: define a Protocol-based model interface and implement it with full Pydantic I/O schemas *(M1 + M2)*
+- [ ] **Part 3 — Data pipeline**: process inference outputs stream-style using generators and functional patterns *(M1 + M2 + M3)*
+- [ ] **Part 4 — Resilience layer**: wrap inference and pipeline steps with retry decorators and circuit breaker middleware *(M1 + M4)*
+- [ ] **Part 5 — API layer**: serve the full pipeline via FastAPI with Pydantic request/response models *(M3 + M4)*
+- [ ] **Part 6 — Test suite**: cover all layers end-to-end using pytest fixtures and mocks *(M1 through M4)*
+- [ ] **Capstone Quiz & Final Review**
 
 ---
 

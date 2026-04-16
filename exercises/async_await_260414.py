@@ -38,7 +38,10 @@ async def fetch_user_data(user_id: int, latency: float = 0.5) -> dict:
         Dict containing user data, e.g., {"user_id": 1, "name": "User 1", "status": "active"}
     """
     # YOUR CODE HERE
-    pass
+    print(f"Fetch started for user: {user_id}")
+    await asyncio.sleep(latency)
+    print(f"Fetch completed for user: {user_id}")
+    return {"user_id": user_id, "name": "Tim", "status": "active"}
 
 
 # =============================================================================
@@ -58,7 +61,10 @@ def fetch_user_data_sync(user_id: int, latency: float = 0.5) -> dict:
         Dict containing user data
     """
     # YOUR CODE HERE
-    pass
+    print(f"Fetch started for user: {user_id}")
+    time.sleep(latency)
+    print(f"Fetch completed for user: {user_id}")
+    return {"user_id": user_id, "name": "Tim", "status": "active"}
 
 
 # =============================================================================
@@ -82,7 +88,14 @@ async def fetch_users_sequential(user_ids: list[int]) -> list[dict]:
         List of user data dicts
     """
     # YOUR CODE HERE
-    pass
+    results = []
+    for user_id in user_ids:
+        user = await fetch_user_data(user_id)
+        results.append(user)
+    
+    return results
+        
+        
 
 
 # =============================================================================
@@ -106,7 +119,14 @@ async def fetch_users_concurrent(user_ids: list[int]) -> list[dict]:
         List of user data dicts
     """
     # YOUR CODE HERE
-    pass
+    coroutines = []
+    for user_id in user_ids:
+        coroutines.append(fetch_user_data(user_id))
+    result = await asyncio.gather(*coroutines)    
+    return result
+        
+        
+    
 
 
 # =============================================================================
@@ -129,7 +149,10 @@ async def time_async_execution(coro) -> tuple[Any, float]:
         Tuple of (coroutine_result, elapsed_time_in_seconds)
     """
     # YOUR CODE HERE
-    pass
+    start = time.time()
+    result = await(coro)
+    end = time.time()
+    return (result, end - start)
 
 
 # =============================================================================
@@ -151,16 +174,29 @@ async def main():
     # ----- SYNCHRONOUS BENCHMARK -----
     print("\n--- SYNCHRONOUS (baseline) ---")
     # TODO: Time fetching all users synchronously using fetch_user_data_sync
-    # print(f"Sync time: {elapsed:.2f}s")
+    start = time.time()
+    for user_id in USER_IDS:
+        data = fetch_user_data_sync(user_id, LATENCY)
+    end = time.time()
+    elapsed = end - start
+    print(f"Sync time: {elapsed:.2f}s")
     
     # ----- ASYNC SEQUENTIAL BENCHMARK -----
     print("\n--- ASYNC SEQUENTIAL ---")
     # TODO: Time fetch_users_sequential
-    # print(f"Async sequential time: {elapsed:.2f}s")
+    start = time.time()
+    end = time.time()
+    elapsed = end - start
+    # fetch_users_sequential()
+    print(f"Async sequential time: {elapsed:.2f}s")
     
     # ----- ASYNC CONCURRENT BENCHMARK -----
     print("\n--- ASYNC CONCURRENT ---")
     # TODO: Time fetch_users_concurrent
+    start = time.time()
+    end = time.time()
+    elapsed = end - start
+    fetch_users_concurrent()
     # print(f"Async concurrent time: {elapsed:.2f}s")
     
     print("\n" + "=" * 60)

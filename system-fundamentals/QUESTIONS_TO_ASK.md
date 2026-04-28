@@ -66,10 +66,12 @@ A running list of questions to ask during 1:1s, team meetings, or Slack conversa
 ## Observability Questions
 
 ### Monitoring
-- [ ] What metrics do we collect from each service?
-- [ ] What dashboards should I know about?
-- [ ] How do we set SLOs/SLIs?
-- [ ] What's our metrics retention policy?
+- [x] During [incident X], we looked at these dashboards but they didn't point us to the root cause. Can you walk me through what the dashboards showed during that incident, and what we *should* have been looking at instead?
+  - [ ] the dashboards didn't show the error beacuse it was a nil pointer dereference. a dashboard that would've helped us find the error is measeuring started payments against completed payments. this dashboard would've shown started payments as high, and completed payments suddenly dropping off
+- [ ] I've noticed we get alerts for panic recoveries, but I haven't seen them visualized in these dashboards. Is there a way to see panic recovery trends over time, or do we only track them through alerts?
+  - [ ] you can see these in google cloud console. if you filter out the useless logs (which is something i'm going to work on doin with a pr, so you don't have to do it manually), then that is a good place to se panic recoveries and nil pointer dereference errors.
+- [ ] Can we look at the metrics during our last outage
+
 - [ ] How do we handle metric cardinality issues?
 
 ### Alerting

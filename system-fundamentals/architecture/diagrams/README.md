@@ -1,0 +1,1 @@
+generated these with cline by looking at care-credit-integrations service and having it mentor me about what happens to an http request when it leaves the browser, and how it gets routed to the service.

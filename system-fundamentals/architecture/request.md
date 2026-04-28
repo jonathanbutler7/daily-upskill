@@ -2,266 +2,208 @@
 
 Complete guide to how HTTP requests are routed from browser to `internal/server/server.go`.
 
+## Mermaid Request Flow
+
+```mermaid
+flowchart TD
+  C[Client Browser\nPOST /v1/care-credit/purchases] --> LB[GCP Load Balancer\nTLS termination + routing]
+  LB --> I[Kubernetes Ingress\nHost/path routing]
+  I --> S[Kubernetes Service ClusterIP\nLoad balancing across pods]
+  S --> P[Pod Container\ndaemon.Main\nHTTP :8080 / gRPC :9090]
+
+  P --> A[Gateway Auth\ngateway.AuthClient + wauth.KeyClient]
+  A -->|Valid JWT| R[Gateway Route Matching\nprotobuf google.api.http annotations]
+  A -->|Invalid JWT| U[HTTP 401 Unauthorized]
+
+  R --> X[Request Processing\nJSON parse + validation]
+  X --> H[Handler\ninternal/server/server.go\nCareCreditIntegrationServer]
+  H --> O[Response Payload]
+  O --> B[Response Path Back\nGateway -> Pod -> Service -> Ingress -> LB -> Client]
+```
+
 ## Visual Request Flow
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                         CLIENT (Browser)                       │
-│                                                                 │
-│  POST https://api.getweave.com/v1/care-credit/purchases        │
-│  Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...  │
-│  Content-Type: application/json                                 │
-│  Body: {                                                        │
-│    "payment_id": "550e8400-e29b-41d4-a716-446655440000",       │
-│    "merchant_number": "1234567890",                            │
-│    "account_id": "9876543210",                                 │
-│    ...                                                          │
-│  }                                                              │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ HTTPS
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    LAYER 1: GCP LOAD BALANCER                  │
-│                                                                 │
-│  Component: Google Cloud Platform Load Balancer                │
-│  Managed by: GCP Infrastructure                                │
-│                                                                 │
-│  Responsibilities:                                              │
-│  • TLS/SSL termination (HTTPS -> HTTP)                         │
-│  • Geographic routing                                           │
-│  • DDoS protection                                              │
-│  • Health checks                                                │
-│  • Routes to appropriate GKE cluster:                          │
-│    - Production: wsf-prod-1-gke1-west3 (us-west3)              │
-│    - Dev: wsf-dev-0-gke1-west4 (us-west4)                      │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ HTTP (internal)
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  LAYER 2: KUBERNETES INGRESS                   │
-│                                                                 │
-│  Component: GKE Ingress Controller                             │
-│  Namespace: care-credit-integrations                           │
-│                                                                 │
-│  Responsibilities:                                              │
-│  • Path-based routing                                           │
-│  • Host-based routing                                           │
-│  • Routes to Kubernetes Service                                 │
-│                                                                 │
-│  Configuration Source: .weave.yaml                              │
-│    namespace: care-credit-integrations                          │
-│    schemas:                                                     │
-│      - path: payments-platform/care-credit-integration          │
-│        public: true                                             │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ HTTP
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                 LAYER 3: KUBERNETES SERVICE                    │
-│                                                                 │
-│  Component: K8s Service (ClusterIP)                            │
-│  Name: care-credit-integrations                                │
-│                                                                 │
-│  Responsibilities:                                              │
-│  • Load balancing across pods                                   │
-│  • Service discovery                                            │
-│  • Health check enforcement                                     │
-│  • Selects one healthy pod (e.g., Pod 2 of 3)                  │
-│                                                                 │
-│  Load Balancing: Round-robin or least-connections              │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ HTTP
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      LAYER 4: POD (Container)                  │
-│                                                                 │
-│  Container Image: care-credit-integrations:v1.2.3              │
-│  Built from: Dockerfile (scratch + binary)                     │
-│  Entry Point: /care-credit-integrations                        │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │ Process: daemon.Main()                                   │  │
-│  │ Repo: weavelab.xyz/devx/pkg/daemon                       │  │
-│  │                                                           │  │
-│  │ • Initializes application lifecycle                      │  │
-│  │ • Sets up signal handling (SIGTERM, SIGINT)             │  │
-│  │ • Manages graceful shutdown                              │  │
-│  │ • Starts HTTP Gateway on :8080                           │  │
-│  │ • Starts gRPC Server on :9090 (internal only)            │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ HTTP to :8080
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                 LAYER 5: HTTP GATEWAY (:8080)                 │
-│                                                                 │
-│  Component: Auto-generated Gateway                             │
-│  Repo: weavelab.xyz/schema-gen-go                              │
-│  File: schemas/payments-platform/care-credit-integration/      │
-│        gateway.pb.go (generated)                               │
-│                                                                 │
-│  Created by: carecreditintegration.NewGateway(ctx, opts...)    │
-│  Source: main.go lines 91-97                                   │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │ STEP 1: AUTHENTICATION                                   │  │
-│  │                                                           │  │
-│  │ Component: gateway.AuthClient()                          │  │
-│  │ Type: wauth.KeyClient                                    │  │
-│  │ Repo: weavelab.xyz/monorail/shared/wlib/wauth            │  │
-│  │                                                           │  │
-│  │ Process:                                                  │  │
-│  │ 1. Extract "Authorization: Bearer <token>" header        │  │
-│  │ 2. Validate JWT signature using public keys              │  │
-│  │ 3. Verify token expiration (exp claim)                   │  │
-│  │ 4. Verify issuer (iss claim)                             │  │
-│  │ 5. Verify audience (aud claim)                           │  │
-│  │ 6. Extract user claims (user_id, location_id, etc.)      │  │
-│  │                                                           │  │
-│  │ If INVALID:                                               │  │
-│  │   -> Return HTTP 401 Unauthorized                         │  │
-│  │   -> STOP (request never reaches handler)                 │  │
-│  │                                                           │  │
-│  │ If VALID:                                                 │  │
-│  │   -> Continue to Step 2                                   │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │ STEP 2: ROUTE MATCHING                                   │  │
-│  │                                                           │  │
-│  │ HTTP Router (generated from protobuf annotations)        │  │
-│  │                                                           │  │
-│  │ Route Table:                                              │  │
-│  │ POST /v1/care-credit/purchases            -> CreatePurchase│ │
-│  │ POST /v1/care-credit/refunds              -> CreateRefund │ │
-│  │ POST /v1/care-credit/prefill              -> PrefillData...│ │
-│  │ POST /v1/care-credit/patient-data-purl    -> GeneratePa...│ │
-│  │ POST /v1/care-credit/quickscreen/offer    -> Quickscreen...││
-│  │ GET  /v1/care-credit/quickscreen/offer/:id -> GetQuick... │ │
-│  │ ... (more routes)                                         │  │
-│  │                                                           │  │
-│  │ Defined in: .proto file with google.api.http annotations │  │
-│  │ Example:                                                  │  │
-│  │   rpc CreatePurchase(...) returns (...) {                │  │
-│  │     option (google.api.http) = {                         │  │
-│  │       post: "/v1/care-credit/purchases"                  │  │
-│  │       body: "*"                                           │  │
-│  │     };                                                    │  │
-│  │   }                                                       │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │ STEP 3: REQUEST PROCESSING                               │  │
-│  │                                                           │  │
-│  │ 1. Parse JSON body into Go struct                        │  │
-│  │    JSON -> CreatePurchaseRequest (protobuf message)      │  │
-│  │                                                           │  │
-│  │ 2. Validate request schema                               │  │
-│  │    - Required fields present                             │  │
-│  │    - Field types correct                                 │  │
-│  │    - Constraints satisfied                               │  │
-│  │                                                           │  │
-│  │ 3. Convert to internal gRPC format (if needed)           │  │
-│  │                                                           │  │
-│  │ 4. Call handler method                                   │  │
-│  │    -> internal/server/server.go                          │  │
-│  │    -> CareCreditIntegrationServer.CreatePurchase()       │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  Configuration:                                                 │
-│  • Request timeout: 2 minutes (from main.go)                   │
-│  • wgateway.WithRequestTimeoutDuration(2*time.Minute)          │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ Function call
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│             LAYER 6: HANDLER (internal/server/server.go)       │
-│                                                                 │
-│  Component: CareCreditIntegrationServer                        │
-│  Repo: weavelab.xyz/care-credit-integrations (THIS REPO)       │
-│  File: internal/server/server.go                               │
-│                                                                 │
-│  Method Signature:                                              │
-│  func (c *CareCreditIntegrationServer) CreatePurchase(         │
-│      gctx context.Context,                                     │
-│      request *carecreditintegration.CreatePurchaseRequest,     │
-│  ) (*carecreditintegration.CreatePurchaseResponse, error)      │
-│                                                                 │
-│  Responsibilities:                                              │
-│  • Business logic execution                                     │
-│  • Database operations (via c.queries)                         │
-│  • External API calls (to Synchrony/CareCredit)                │
-│  • Error handling                                               │
-│  • Response construction                                        │
-│                                                                 │
-│  Note: Authentication already validated by gateway             │
-│        No auth checks needed in handler                         │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ Return response
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      RESPONSE FLOW (Reverse)                    │
-│                                                                 │
-│  Handler -> Gateway -> Pod -> K8s Service -> Ingress -> LB -> Client │
-│                                                                 │
-│  HTTP 200 OK                                                    │
-│  Content-Type: application/json                                 │
-│  Body: {                                                        │
-│    "data": {                                                    │
-│      "purchase": {                                              │
-│        "status": "approved",                                    │
-│        "transaction_info": { ... },                            │
-│        ...                                                      │
-│      }                                                          │
-│    }                                                            │
-│  }                                                              │
-└─────────────────────────────────────────────────────────────────┘
+Client (Browser)
+  POST https://api.getweave.com/v1/care-credit/purchases
+  Authorization: Bearer <jwt>
+  Content-Type: application/json
+        |
+        v
+Layer 1: GCP Load Balancer
+  - TLS termination
+  - Geographic routing
+  - DDoS protection
+  - Health checks
+        |
+        v
+Layer 2: Kubernetes Ingress
+  - Host/path routing
+  - Routes traffic to K8s Service
+  - Config driven by .weave.yaml
+        |
+        v
+Layer 3: Kubernetes Service (ClusterIP)
+  - Service discovery
+  - Load balancing across healthy pods
+        |
+        v
+Layer 4: Pod (Container)
+  - daemon.Main()
+  - HTTP Gateway on :8080
+  - gRPC server on :9090
+        |
+        v
+Layer 5: HTTP Gateway (:8080)
+  - Auth (gateway.AuthClient -> wauth.KeyClient)
+  - Route matching from protobuf HTTP annotations
+  - JSON parsing and request validation
+  - Handler invocation
+        |
+        v
+Layer 6: Handler (internal/server/server.go)
+  - Business logic
+  - Database operations
+  - External CareCredit/Synchrony calls
+  - Response construction
+        |
+        v
+Response flows back through gateway/ingress/LB to client
 ```
+
+## Layer Responsibilities
+
+### Layer 1: GCP Load Balancer
+- Component: Google Cloud Platform Load Balancer
+- Managed by: GCP infrastructure
+- Routes to cluster examples:
+  - Production: `wsf-prod-1-gke1-west3` (`us-west3`)
+  - Dev: `wsf-dev-0-gke1-west4` (`us-west4`)
+
+### Layer 2: Kubernetes Ingress
+- Component: GKE Ingress Controller
+- Namespace: `care-credit-integrations`
+- Source configuration (`.weave.yaml`):
+
+```yaml
+namespace: care-credit-integrations
+schemas:
+  - path: payments-platform/care-credit-integration
+    public: true
+```
+
+### Layer 3: Kubernetes Service
+- Component: Kubernetes Service (`ClusterIP`)
+- Name: `care-credit-integrations`
+- Provides pod selection and load balancing
+
+### Layer 4: Pod / Container
+- Container image: `care-credit-integrations:v1.2.3`
+- Build style: Dockerfile with `scratch` base and compiled binary
+- Process entry point: `/care-credit-integrations`
+- Main process behavior (`daemon.Main()`):
+  - App lifecycle initialization
+  - Signal handling (`SIGTERM`, `SIGINT`)
+  - Graceful shutdown
+  - HTTP gateway startup on `:8080`
+  - Internal gRPC server startup on `:9090`
+
+### Layer 5: HTTP Gateway
+- Component: auto-generated gateway
+- Repo: `weavelab.xyz/schema-gen-go`
+- Generated file: `schemas/payments-platform/care-credit-integration/gateway.pb.go`
+- Instantiated by: `carecreditintegration.NewGateway(ctx, opts...)` in `main.go` (lines 91-97)
+
+#### Step 1: Authentication
+- Component: `gateway.AuthClient()`
+- Type: `wauth.KeyClient`
+- Repo: `weavelab.xyz/monorail/shared/wlib/wauth`
+
+Flow:
+1. Extract `Authorization: Bearer <token>` header.
+2. Validate JWT signature.
+3. Verify expiration, issuer, and audience claims.
+4. Extract user claims.
+5. If invalid, return `401 Unauthorized` and stop.
+6. If valid, continue.
+
+#### Step 2: Route Matching
+- Routes are generated from protobuf `google.api.http` annotations.
+- Example routes:
+  - `POST /v1/care-credit/purchases` -> `CreatePurchase`
+  - `POST /v1/care-credit/refunds` -> `CreateRefund`
+  - `POST /v1/care-credit/prefill` -> `PrefillData...`
+  - `POST /v1/care-credit/patient-data-purl` -> `GeneratePa...`
+  - `POST /v1/care-credit/quickscreen/offer` -> `Quickscreen...`
+  - `GET /v1/care-credit/quickscreen/offer/:id` -> `GetQuick...`
+
+#### Step 3: Request Processing
+1. Parse JSON body into Go structs/protobuf request types.
+2. Validate required fields, field types, and constraints.
+3. Convert to internal gRPC format when needed.
+4. Invoke handler (`internal/server/server.go`).
+
+Gateway configuration notes:
+- Request timeout: 2 minutes (from `main.go`)
+- Option: `wgateway.WithRequestTimeoutDuration(2*time.Minute)`
+
+### Layer 6: Handler (`internal/server/server.go`)
+- Component: `CareCreditIntegrationServer`
+- Method example:
+
+```go
+func (c *CareCreditIntegrationServer) CreatePurchase(
+    gctx context.Context,
+    request *carecreditintegration.CreatePurchaseRequest,
+) (*carecreditintegration.CreatePurchaseResponse, error)
+```
+
+- Responsibilities:
+  - Business logic execution
+  - Database operations (`c.queries`)
+  - External API calls (Synchrony/CareCredit)
+  - Error handling and response construction
+
+Authentication has already been validated by the gateway before handler execution.
+
+## Response Flow
+
+```text
+Handler -> Gateway -> Pod -> K8s Service -> Ingress -> Load Balancer -> Client
+```
+
+Example:
+- Status: `200 OK`
+- Content-Type: `application/json`
+- Body: purchase payload with transaction details
 
 ## Key Components and Repositories
 
-### 1. Infrastructure Layer
-- GCP Load Balancer: Managed by Google Cloud Platform
-- GKE (Kubernetes): Google Kubernetes Engine
-- Configuration: `.weave.yaml` (Weave deployment config)
-
-### 2. Application Framework
-- Repo: `weavelab.xyz/devx`
-- Package: `pkg/daemon`
-- Purpose: Application lifecycle management
-- Code: `main.go` line 24
-
-### 3. HTTP Gateway
-- Repo: `weavelab.xyz/schema-gen-go`
-- Package: `pkg/wgateway`
-- Generated code: `schemas/payments-platform/care-credit-integration/gateway.pb.go`
-- Purpose: HTTP to handler translation, authentication, routing
-- Code: `main.go` lines 91-97
-
-### 4. Authentication
-- Repo: `weavelab.xyz/monorail`
-- Package: `shared/wlib/wauth`
-- Interface: `wauth.KeyClient`
-- Purpose: JWT token validation
-- When: Before any business logic executes
-
-### 5. Business Logic
-- Repo: `weavelab.xyz/care-credit-integrations` (this repo)
-- File: `internal/server/server.go`
-- Type: `CareCreditIntegrationServer`
-- Purpose: Core service implementation
+1. Infrastructure Layer
+   - GCP Load Balancer
+   - GKE (Kubernetes)
+   - Deployment config in `.weave.yaml`
+2. Application Framework
+   - Repo: `weavelab.xyz/devx`
+   - Package: `pkg/daemon`
+   - Purpose: process lifecycle management
+3. HTTP Gateway
+   - Repo: `weavelab.xyz/schema-gen-go`
+   - Package: `pkg/wgateway`
+   - Purpose: auth, route mapping, HTTP-to-handler translation
+4. Authentication
+   - Repo: `weavelab.xyz/monorail`
+   - Package: `shared/wlib/wauth`
+   - Interface: `wauth.KeyClient`
+5. Business Logic
+   - Repo: `weavelab.xyz/care-credit-integrations`
+   - File: `internal/server/server.go`
 
 ## Authentication Details
 
 ### How Authentication Works
-Client sends request with JWT token:
+
+Client request example:
 
 ```http
 POST /v1/care-credit/purchases HTTP/1.1
@@ -270,34 +212,28 @@ Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 ```
 
-Gateway extracts token from `Authorization` header.
+Token validation via `wauth.KeyClient`:
+- Verify signature using public keys
+- Check expiration
+- Validate issuer and audience
+- Extract user claims
 
-`wauth.KeyClient` validates token:
-- Verifies JWT signature using public keys
-- Checks expiration timestamp
-- Validates issuer and audience
-- Extracts user claims
+If invalid: return `401 Unauthorized`.
 
-If invalid: returns `401 Unauthorized` immediately.
-
-If valid: continues to route matching and handler execution.
+If valid: continue to route matching and handler execution.
 
 ### Where Auth Happens
 - Layer: HTTP Gateway (Layer 5)
 - Component: `gateway.AuthClient()`
-- Code: auto-generated in `gateway.pb.go`
-- Repo: `weavelab.xyz/monorail/wauth`
+- Code location: generated gateway code (`gateway.pb.go`)
 
 ### What Handlers See
-Handlers in `internal/server/server.go` receive already-authenticated requests.
-
-- No need to validate auth in business logic
-- Can trust that user is authenticated and authorized
+- Requests reaching `internal/server/server.go` are pre-authenticated.
+- Handler code can focus on business logic.
 
 ## Schema-Driven Development
 
-### How Routes Are Defined
-Routes are defined in protobuf files with HTTP annotations:
+### Route Definition via Protobuf
 
 ```proto
 syntax = "proto3";
@@ -321,65 +257,22 @@ service CareCreditIntegration {
     };
   }
 }
-
-message CreatePurchaseRequest {
-  string payment_id = 1;
-  string merchant_number = 2;
-  string account_id = 3;
-  // ... more fields
-}
-
-message CreatePurchaseResponse {
-  oneof result {
-    Data data = 1;
-    ErrorResponse error_response = 2;
-  }
-}
 ```
 
 ### Code Generation Pipeline
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ 1. Write .proto file                                            │
-│    Repo: weavelab.xyz/schemas (or similar)                     │
-│    File: payments-platform/care-credit-integration/service.proto │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 2. Run protoc compiler with plugins                            │
-│    protoc --go_out=. --go-grpc_out=. --grpc-gateway_out=. ...  │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 3. Generated Go code                                            │
-│    Repo: weavelab.xyz/schema-gen-go                            │
-│    Files:                                                       │
-│    • service.pb.go (message types)                             │
-│    • service_grpc.pb.go (gRPC interfaces)                      │
-│    • service.pb.gw.go (HTTP gateway mappings)                  │
-│    • gateway.go (NewGateway constructor)                       │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 4. Import in service                                            │
-│    Repo: weavelab.xyz/care-credit-integrations                 │
-│    File: main.go                                                │
-│    Code: import carecreditintegration "weavelab.xyz/..."       │
-└─────────────────────────────────────────────────────────────────┘
-```
+1. Author `.proto` definitions.
+2. Run `protoc` with Go, gRPC, and gateway plugins.
+3. Generate code in `weavelab.xyz/schema-gen-go` (`*.pb.go`, `*.pb.gw.go`, etc.).
+4. Import generated packages in this service (`main.go`).
 
 ### Request and Response Bodies
-Defined by: protobuf message definitions.
+- Source of truth: protobuf messages
+- Serialization:
+  - HTTP: JSON
+  - Internal: protobuf binary (for gRPC use cases)
 
-Serialization:
-- HTTP: JSON (via `encoding/json`)
-- Internal: protobuf binary (for gRPC, if used)
-
-Example:
+Request example:
 
 ```json
 {
@@ -396,6 +289,8 @@ Example:
   "promo_code": "PROMO123"
 }
 ```
+
+Response example:
 
 ```json
 {
@@ -440,7 +335,6 @@ CMD ["/care-credit-integrations"]
 ```
 
 ### Deployment Configuration
-Source: `.weave.yaml`
 
 ```yaml
 name: care-credit-integrations
@@ -469,57 +363,38 @@ deploy:
 ### Kubernetes Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│ Deployment: care-credit-integrations                           │
-│ Replicas: 3 (example)                                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│  │ Pod 1        │    │ Pod 2        │    │ Pod 3        │      │
-│  │              │    │              │    │              │      │
-│  │ Container    │    │ Container    │    │ Container    │      │
-│  │ :8080 (HTTP) │    │ :8080 (HTTP) │    │ :8080 (HTTP) │      │
-│  │ :9090 (gRPC) │    │ :9090 (gRPC) │    │ :9090 (gRPC) │      │
-│  └──────────────┘    └──────────────┘    └──────────────┘      │
-│         ▲                   ▲                   ▲               │
-└─────────┼───────────────────┼───────────────────┼───────────────┘
-          │                   │                   │
-          └───────────────────┴───────────────────┘
-                              │
-                ┌─────────────▼──────────────┐
-                │ Kubernetes Service         │
-                │ Type: ClusterIP            │
-                │ Load balances across pods  │
-                └────────────────────────────┘
+Deployment: care-credit-integrations
+Replicas: 3 (example)
+Pods:
+  - Pod 1: :8080 (HTTP), :9090 (gRPC)
+  - Pod 2: :8080 (HTTP), :9090 (gRPC)
+  - Pod 3: :8080 (HTTP), :9090 (gRPC)
+
+Kubernetes Service (ClusterIP) load balances across pods.
 ```
 
 ### Shared State
-OAuth tokens (for Synchrony API):
-- Each pod maintains its own in-memory token cache
-- Background refresher proactively refreshes tokens
-- Slight staleness across pods is acceptable (tokens valid ~1 hour)
+
+OAuth tokens (Synchrony API):
+- Each pod has its own in-memory token cache
+- Background refreshers keep tokens fresh
+- Minor cross-pod staleness is acceptable (about 1-hour validity)
 
 Database:
-- All pods share the same CloudSQL PostgreSQL instance
-- Connection pooling per pod
-- Transactions ensure consistency
+- Shared CloudSQL PostgreSQL instance
+- Per-pod connection pooling
+- Transactional consistency
 
 ## Summary
 
 ### Complete HTTP Request Journey
 1. Client sends HTTPS request to `api.getweave.com`.
-2. GCP Load Balancer terminates TLS and routes to GKE cluster.
-3. Kubernetes Ingress routes to Service based on path.
-4. Kubernetes Service load balances to one of N pods.
-5. HTTP Gateway (`:8080`):
-   - Authenticates request via `wauth.KeyClient`
-   - Matches route to handler
-   - Parses JSON request body
-   - Calls handler method
-6. Handler (`internal/server/server.go`):
-   - Executes business logic
-   - Returns response
-7. Response flows back through layers to client.
+2. GCP Load Balancer terminates TLS and routes to a GKE cluster.
+3. Kubernetes Ingress routes by host/path to the service.
+4. Kubernetes Service load balances to a healthy pod.
+5. Gateway (`:8080`) authenticates, matches route, parses request, and calls handler.
+6. Handler executes business logic and returns response.
+7. Response travels back through gateway -> ingress -> load balancer -> client.
 
 ### Key Repositories
 
@@ -530,9 +405,10 @@ Database:
 | `weavelab.xyz/monorail` | Shared libraries (`wauth`, `wgrpcserver`) |
 | `weavelab.xyz/care-credit-integrations` | This service (business logic) |
 
-### Authentication
-- Where: HTTP Gateway layer
+### Authentication Quick Facts
+- Where: HTTP gateway layer
 - Component: `wauth.KeyClient`
 - Method: JWT token validation
-- When: Before any business logic
-- Result: Handlers receive pre-authenticated requests
+- Timing: before business logic
+- Outcome: handlers receive pre-authenticated requests
+

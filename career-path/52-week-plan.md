@@ -6,6 +6,25 @@
 
 ---
 
+## How to Use This Plan
+
+Each weekly goal is designed around how I learn best:
+
+### Learning Style Approach
+- **Concrete-first**: Start with diagrams, code, or real scenarios - not abstract reading
+- **Visual processing**: Draw the architecture before reading about it
+- **One concept at a time**: Each week focuses on a single deliverable
+- **Small experiments**: Predict outcomes, then verify through hands-on work
+- **Model-building**: Build high-level understanding first, details later
+
+### Weekly Pattern
+1. **Start with a concrete artifact** (diagram, code, doc)
+2. **Ask "why" questions** to system owners - learn the rejected alternatives
+3. **Write it down** - synthesizing into writing forces clarity
+4. **Teach someone** - explaining to others reveals gaps in understanding
+
+---
+
 ## Q1: Technical Foundation (Weeks 1-13)
 
 Build deep understanding of production systems and architecture patterns. This quarter establishes the technical credibility that bootcamp grads often lack.

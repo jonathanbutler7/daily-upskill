@@ -6,22 +6,22 @@
 <details>
 <summary><strong>SQL</strong></summary>
 
-- **When:** ACID, joins, relationships
-- **Tradeoff:** Hard to scale horizontally
+- **When:** ACID transactions, complex joins, relationships
+- **Tradeoff:** Horizontal scaling is complex and expensive
 
 </details>
 <details>
 <summary><strong>NoSQL</strong></summary>
 
-- **When:** Flexible schema, scale writes
-- **Tradeoff:** No joins, eventual consistency
+- **When:** Flexible schema, high write throughput
+- **Tradeoff:** Limited joins, often eventual consistency
 
 </details>
 <details>
 <summary><strong>Redis</strong></summary>
 
-- **When:** Caching, sessions
-- **Tradeoff:** Data loss risk, memory-bound
+- **When:** Caching, sessions, rate limiting
+- **Tradeoff:** Volatile by default, memory-bound
 
 </details>
 </details>
@@ -34,22 +34,22 @@
 <details>
 <summary><strong>Monolith</strong></summary>
 
-- **When:** Small team, simple domain
-- **Tradeoff:** One bug = full outage
+- **When:** Small teams, simple domains
+- **Tradeoff:** Tight coupling, single point of failure
 
 </details>
 <details>
 <summary><strong>Microservices</strong></summary>
 
-- **When:** Large teams, independent scaling
-- **Tradeoff:** Network complexity
+- **When:** Large orgs, independent scaling & deployment
+- **Tradeoff:** Distributed systems complexity (latency, failures, tracing)
 
 </details>
 <details>
 <summary><strong>Serverless</strong></summary>
 
-- **When:** Sporadic traffic, event-driven
-- **Tradeoff:** Cold starts, vendor lock-in
+- **When:** Variable/sporadic traffic, event-driven workloads
+- **Tradeoff:** Cold starts, vendor lock-in, tail latency
 
 </details>
 </details>
@@ -62,22 +62,22 @@
 <details>
 <summary><strong>REST</strong></summary>
 
-- **When:** Public APIs, caching
+- **When:** Public APIs, browser compatibility, caching
 - **Tradeoff:** Over/under-fetching
 
 </details>
 <details>
 <summary><strong>gRPC</strong></summary>
 
-- **When:** Service-to-service, low latency
-- **Tradeoff:** Not browser-native
+- **When:** Internal services, low latency, streaming
+- **Tradeoff:** Poor browser support (requires gRPC-Web)
 
 </details>
 <details>
 <summary><strong>Message Queue</strong></summary>
 
-- **When:** Decoupling, spikes
-- **Tradeoff:** Added latency
+- **When:** Decoupling, traffic spikes, async processing
+- **Tradeoff:** Added latency & operational complexity
 
 </details>
 </details>
@@ -90,29 +90,29 @@
 <details>
 <summary><strong>Vertical</strong></summary>
 
-- **When:** Quick fix, not distributed
-- **Tradeoff:** Hardware limits
+- **When:** Simple, quick scaling (single node)
+- **Tradeoff:** Hardware limits, single point of failure
 
 </details>
 <details>
 <summary><strong>Horizontal</strong></summary>
 
-- **When:** High availability
-- **Tradeoff:** Stateless required
+- **When:** High availability & massive scale
+- **Tradeoff:** Requires stateless design (or distributed state)
 
 </details>
 <details>
 <summary><strong>Read Replicas</strong></summary>
 
-- **When:** Read-heavy
-- **Tradeoff:** Replication lag
+- **When:** Read-heavy workloads
+- **Tradeoff:** Replication lag (eventual consistency)
 
 </details>
 <details>
 <summary><strong>Sharding</strong></summary>
 
-- **When:** Scale writes
-- **Tradeoff:** Cross-shard queries expensive
+- **When:** Massive write scale
+- **Tradeoff:** Cross-shard queries are complex & expensive
 
 </details>
 </details>
@@ -123,31 +123,31 @@
 <summary><strong>Consistency</strong></summary>
 
 <details>
-<summary><strong>Strong</strong></summary>
+<summary><strong>Strong Consistency</strong></summary>
 
-- **When:** Financial, inventory
-- **Tradeoff:** Higher latency
+- **When:** Financial transactions, inventory, reservations
+- **Tradeoff:** Higher latency, lower availability under partitions
 
 </details>
 <details>
-<summary><strong>Eventual</strong></summary>
+<summary><strong>Eventual Consistency</strong></summary>
 
-- **When:** Social feeds, analytics
-- **Tradeoff:** Stale reads possible
+- **When:** Social feeds, analytics, recommendations
+- **Tradeoff:** Temporary inconsistencies (stale reads)
 
 </details>
 <details>
 <summary><strong>ACID</strong></summary>
 
-- **When:** Data integrity critical
-- **Tradeoff:** Harder to scale
+- **When:** Data integrity is critical
+- **Tradeoff:** Harder to scale horizontally
 
 </details>
 <details>
 <summary><strong>BASE</strong></summary>
 
-- **When:** Availability > consistency
-- **Tradeoff:** App handles inconsistency
+- **When:** Availability > immediate consistency
+- **Tradeoff:** Application must handle inconsistency
 
 </details>
 </details>
@@ -160,22 +160,22 @@
 <details>
 <summary><strong>Blue-Green</strong></summary>
 
-- **When:** Instant rollback
-- **Tradeoff:** 2x resources
+- **When:** Zero-downtime deployments, instant rollback
+- **Tradeoff:** Double resource usage during cutover
 
 </details>
 <details>
 <summary><strong>Canary</strong></summary>
 
-- **When:** Test with real traffic
-- **Tradeoff:** Monitoring overhead
+- **When:** Gradual rollout with real user traffic
+- **Tradeoff:** Complex monitoring & rollout logic
 
 </details>
 <details>
 <summary><strong>Rolling</strong></summary>
 
-- **When:** Resource-constrained
-- **Tradeoff:** Mixed versions
+- **When:** Resource-constrained environments
+- **Tradeoff:** Mixed versions running simultaneously
 
 </details>
 </details>
@@ -188,22 +188,22 @@
 <details>
 <summary><strong>Circuit Breaker</strong></summary>
 
-- **When:** Flaky downstream
-- **Tradeoff:** Needs tuning
+- **When:** Protecting against flaky downstream services
+- **Tradeoff:** Requires careful tuning & monitoring
 
 </details>
 <details>
 <summary><strong>Retry + Backoff</strong></summary>
 
-- **When:** Transient failures
-- **Tradeoff:** Retry storms
+- **When:** Handling transient failures
+- **Tradeoff:** Risk of retry storms / thundering herd
 
 </details>
 <details>
 <summary><strong>Timeout</strong></summary>
 
-- **When:** Always
-- **Tradeoff:** Too short/long = problems
+- **When:** Everywhere
+- **Tradeoff:** Poor tuning leads to cascading failures or false errors
 
 </details>
 </details>

@@ -139,6 +139,7 @@
 <details>
 <summary><strong>ACID</strong></summary>
 
+- Atomicity, Consistency, Isolation, and Durability
 - **When:** Data integrity is critical
 - **Tradeoff:** Harder to scale horizontally
 
@@ -146,6 +147,7 @@
 <details>
 <summary><strong>BASE</strong></summary>
 
+- Basically Available, Soft state, Eventual consistency
 - **When:** Availability > immediate consistency
 - **Tradeoff:** Application must handle inconsistency
 

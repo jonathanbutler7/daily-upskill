@@ -6,7 +6,7 @@
 <details>
 <summary><strong>SQL</strong></summary>
 
-- **When:** ACID transactions, complex joins, relationships
+- **When:** Relationships, complex joins, ACID transactions, 
 - **Tradeoff:** Horizontal scaling is complex and expensive
 
 </details>
@@ -14,7 +14,7 @@
 <summary><strong>NoSQL</strong></summary>
 
 - **When:** Flexible schema, high write throughput
-- **Tradeoff:** Limited joins, often eventual consistency
+- **Tradeoff:** Limited joins, eventual consistency
 
 </details>
 <details>

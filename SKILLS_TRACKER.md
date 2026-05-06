@@ -12,5 +12,6 @@
 | 2026-04-02 | Python Foundations| module_1_quiz.ipynb| Worked on quiz questions (20 minutes) |
 | 2026-04-03 | Python Foundations| module_1_quiz.ipynb| Worked on quiz questions (25 minutes) |
 | 2026-04-04 | Python Foundations| module_1_quiz.ipynb| Worked on quiz questions (30 minutes) |
+| 2026-05-05 | System Design| design patterns cheat sheet|Memorized tradeoffs (30 minutes) |
 
 <!-- AI will append new rows every day -->

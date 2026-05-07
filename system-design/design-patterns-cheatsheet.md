@@ -109,7 +109,7 @@
 
 </details>
 <details>
-<summary><strong>Sharding</strong></summary>
+<summary><strong>Sharding (Horizontal Partitioning)</strong></summary>
 
 - **When:** Massive write scale
 - **Tradeoff:** Cross-shard queries are complex & expensive

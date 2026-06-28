@@ -22,20 +22,27 @@ As a bootcamp grad, there's a perception gap around technical depth compared to 
 - **Cross-team visibility**: Currently scoped to single team; Staff requires org-wide impact
 - **Technical authority**: Need to establish expertise in a specific domain
 
+## Domain Focus: Payments
+
+Payments is the strongest current candidate for technical authority. It combines backend architecture, distributed systems, reliability, data correctness, financial risk, compliance, and cross-functional work with Product, Finance, Risk, Support, and Operations.
+
+The goal is to become the engineer people involve early when a payments change has money movement, customer trust, operational, or compliance risk.
+
 ## The Plan
 
-The 52-week plan in this directory is organized into 4 quarters:
+The 52-week plan in this directory is now organized around becoming strong in payments:
 
 | Quarter | Focus | Outcome |
 |---------|-------|---------|
-| Q1 | Technical Foundation | Deep understanding of 3 production systems |
-| Q2 | Cross-Team Impact | Lead a multi-team technical initiative |
-| Q3 | Technical Authority | Become the go-to person for a domain |
-| Q4 | Promotion Case | Build evidence for Staff promotion |
+| Q1 | Reset the track and build the payments map | Completed projects documented; payments fundamentals named |
+| Q2 | Build the ledger and learn money accuracy | Double-entry ledger, balances, reversals, and reconciliation |
+| Q3 | Build reliable payment workflows | Payment state machine, webhooks, retries, audit logs, and operations |
+| Q4 | Turn payments knowledge into Staff-level evidence | Work-connected artifacts, review checklist, portfolio index, and next-year plan |
 
 ## Files
 
-- `52-week-plan.md` - Weekly goals with dates (May 4, 2026 - May 3, 2027)
+- `52-week-plan.md` - Weekly payments-specialist plan with dates (May 4, 2026 - May 3, 2027)
+- `payments-specialist-guide.md` - Guide for building payments/fintech domain expertise from the current payments team role
 - `years-2-5-roadmap.md` - Loose roadmap for Staff → EM → Senior EM → Director (May 2027 - May 2031)
 
 ## How I Learn Best
@@ -61,4 +68,4 @@ Each weekly goal should follow this pattern:
 - **Ship over study**: Designing and shipping systems beats reading about them
 - **Artifacts over conversations**: Design docs, diagrams, and blog posts scale influence
 - **Cross-team over single-team**: Staff is measured by org-wide impact
-- **Tradeoffs over solutions**: Explain why it's the right tradeoff, not just what to build
+- **Tradeoffs over solutions**: Explain why it's the right tradeoff and what to build

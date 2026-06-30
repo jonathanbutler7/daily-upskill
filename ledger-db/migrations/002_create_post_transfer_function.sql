@@ -16,6 +16,23 @@ declare
     from_currency char(3);
     to_currency char(3);
 begin
+
+    -- Manually validate idempotency_key is unique
+    -- for better UX. Postgres will prevent duplicates
+    -- by returning a UNIQUE constraint error on the
+    -- idempotency_key field. But the product requirement
+    -- is to return a value rather than an error. Handle
+    -- it here rather than application layer because a
+    -- request retry should not move money twice.
+    select id
+        into existing_transaction_id
+    from ledger_transactions
+    where ledger_transactions.idempotency_key = post_transfer.idempotency_key;
+
+    if existing_transaction_id is not null then
+        return existing_transaction_id;
+    end if;
+
     -- Validate amount > 0.
     if transfer_amount <= 0 then
         raise exception 'amount must be greater than zero';

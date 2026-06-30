@@ -2,7 +2,7 @@
 
 **Goal**: Build Staff-level technical authority in payments  
 **Timeline**: May 4, 2026 - May 3, 2027  
-**Current date for this plan**: June 17, 2026  
+**Current date for this plan**: June 30, 2026
 **Current track**: Payments fundamentals, ledger correctness, reconciliation, risk, and reliable money movement
 
 This plan changed because the pay syncing project is done. PayerSync still counts as proof that you can take a payments-adjacent system from idea to documented design, but it should not consume the rest of the year.
@@ -187,19 +187,19 @@ Use the weekly plan as a track, not a prison. If a real work payments project ap
 - **Work connection**: Look for a real example where internal state and external state can disagree.
 - **Done when**: The project explains how duplicate, delayed, or mismatched records are handled.
 
-### Week 4 - May 25, 2026
+### Week 4 - May 25, 2026 ✅
 
 - [x] **Artifact**: Finish the pay syncing project.
 - **Work connection**: Pull out the strongest lessons for work design reviews.
 - **Done when**: PayerSync is complete enough to use as a portfolio/proof-of-learning artifact.
 
-### Week 5 - Jun 1, 2026
+### Week 5 - Jun 1, 2026 ✅
 
 - [x] **Artifact**: Write a short PayerSync retrospective.
 - **Work connection**: Identify which lessons transfer to Stripe, reconciliation, ledger, or payment-state work.
 - **Done when**: You know what PayerSync taught you and what it did not teach deeply enough.
 
-### Week 6 - Jun 8, 2026
+### Week 6 - Jun 8, 2026 ✅
 
 - [x] **Artifact**: Complete and document the payment propensity ML project from June 9-10.
 - **Work connection**: Think through how a payment-likelihood score could be misused in a real product.
@@ -229,15 +229,15 @@ Use the weekly plan as a track, not a prison. If a real work payments project ap
 - **Work connection**: Find one internal ledger or reporting concept and map it to accounts, entries, and balances.
 - **Done when**: You can explain debits, credits, balanced transactions, reversals, and derived balances without hand-waving.
 
-### Week 11 - Jul 13, 2026
+### Week 11 - Jul 13, 2026 ✅
 
-- [ ] **Artifact**: Scope the ledger project.
+- [x] **Artifact**: Scope the ledger project.
 - **Work connection**: Ask what ledger-like record your team trusts when payment systems disagree.
 - **Done when**: The README has goals, non-goals, account types, transaction types, invariants, and example flows.
 
-### Week 12 - Jul 20, 2026
+### Week 12 - Jul 20, 2026 ✅
 
-- [ ] **Artifact**: Design the ledger data model.
+- [x] **Artifact**: Design the ledger data model.
 - **Work connection**: Compare it to how real payment records link to processor IDs, bank IDs, customer IDs, and internal IDs.
 - **Done when**: Accounts, transactions, entries, metadata, idempotency keys, and balance queries are modeled.
 

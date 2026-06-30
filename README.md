@@ -1,78 +1,57 @@
-# Daily Upskill: Python, ML & Data Engineering
+# Daily Upskill
 
-Welcome! This repo is designed for consistent, 15-minute daily practice to build strong Python, ML, and Data Engineering skills through hands-on practice.
+A workspace for building payments expertise and Staff-level technical authority.
 
-## Quick Start
+## What This Is
 
-```bash
-# Clone the repo
-git clone git@github.com:jonathanbutler7/daily-upskill.git
-cd daily-upskill
+This repo started as a "15-minute daily practice" experiment for Python and ML. That didn't stick. What actually worked was building real projects that forced me to learn concepts deeply.
 
-# Set up a virtual environment
-python -m venv .venv
-source .venv/bin/activate
+Small exercises felt pointless. Small investment, small return. Larger projects with real complexity taught me more and felt worth the time.
 
-# Install dependencies
-pip install pydantic pytest
-```
+The repo has evolved into three things:
 
-**First task?** Check [ROADMAP.md](ROADMAP.md) and start with Module 1!
+1. **Projects** - Working systems that implement payments concepts
+2. **Knowledge** - Reference docs for payments, system design, and career planning
+3. **Learning** - The original exercise structure, mostly archived
 
----
-
-## Progress
-
-| Module | Status |
-|--------|--------|
-| [Module 1: Python Foundations](#module-1-python-foundations) | ✅ Complete |
-| Module 2: ML Engineering & Tools | 🔜 Up Next |
-| Module 3: Data Engineering & Architecture | ⏳ Planned |
-| Module 4: System Design & Backend Patterns | ⏳ Planned |
-| Module 5: Technical Leadership & Mentorship | ⏳ Planned |
-
----
-
-## Daily Workflow (The 15-Minute Habit)
-
-1. **Open the Repo**: Start each morning by opening this repository in VS Code.
-2. **Start the Task**: Prompt Cline with: *"Pick the next task from `ROADMAP.md`. Suggest a video and provide a skeleton for an exercise in `exercises/`."*
-3. **Learn**: Watch the suggested YouTube video or tutorial (5-10 mins).
-4. **Practice**: Fill in the core logic of the provided skeleton in `exercises/taskname_YYMMDD.py`.
-5. **Review**: Once you've made an attempt, tell Cline: *"I've finished my attempt. Can you review it?"*
-6. **Log & Commit**: Tell Cline: *"I'm done for the day. Let's log the duration and commit my changes."*
-
----
-
-## Core Rules
-
-- **No Direct Answers**: Cline will only provide hints, pseudocode, and keywords. You'll need to do the research and trial-and-error yourself.
-- **Hands-on Practice**: You'll always start with a skeleton, but you must type the core logic yourself to build muscle memory.
-- **Track Progress**: We log the time spent on each exercise in `SKILLS_TRACKER.md`.
-
----
-
-## Project Structure
+## Structure
 
 ```
 daily-upskill/
-├── concepts/                  # Concept reference files (one per topic)
-│   ├── CONCEPT_TEMPLATE.md    # Template for new concepts
-│   └── python/foundations/    # Module 1 concepts
-├── exercises/                 # Daily exercise files
-├── quizzes/                   # End-of-module quizzes (Jupyter notebooks)
-├── ROADMAP.md                 # Learning path and task list
-├── SKILLS_TRACKER.md          # Progress log
-├── CONTRIBUTING.md            # How to add new content
-└── .clinerules                # Mentorship rules for Cline
+├── projects/                      # Working code
+│   ├── payer-sync/               # Healthcare payment reconciliation
+│   ├── ledger-db/                # Double-entry ledger in Postgres
+│   └── will-they-pay/            # ML payment propensity model
+│
+├── knowledge/                     # Reference documentation
+│   ├── payments-fundamentals/    # Core payments concepts
+│   ├── system-fundamentals/      # Production infrastructure
+│   ├── system-design/            # Design patterns
+│   └── career-path/              # Staff → Director roadmap
+│
+├── learning/                      # Original learning materials
+│   ├── exercises/                # Python exercises (mostly done)
+│   ├── ROADMAP.md                # Learning progression
+│   └── SKILLS_TRACKER.md         # Project log
+│
+└── archive/                       # Deprecated content
+    └── old-stuff/                # Early experiments
 ```
 
+## Current Focus
+
+Building payments domain expertise for Staff Engineer promotion. The goal is to become the engineer people pull into design conversations when money movement, correctness, or risk is involved.
+
+See `knowledge/career-path/` for the full plan.
+
+## How I Learn
+
+- **Projects over exercises** - Building systems teaches more than isolated practice
+- **Concrete first** - See the problem before the theory
+- **Write it down** - Documenting forces clarity
+- **Connect to work** - Learning sticks when it applies to real systems
+
 ---
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding new concepts and exercises.
-
----
-
-**Start Date**: 2026-03-22
+**Started**: March 2026  
+**Current track**: Payments fundamentals, ledger correctness, reconciliation, reliability

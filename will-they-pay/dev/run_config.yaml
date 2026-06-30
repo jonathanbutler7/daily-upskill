@@ -1,0 +1,12 @@
+run:
+  env:
+  - name: TEST_STRING
+    value: test-string
+  - name: TEST_ADDRESS
+    value: google.com:8080
+  - name: TEST_INT
+    value: "13"
+  - name: TEST_BOOL
+    value: "true"
+  - name: TEST_DURATION
+    value: 5m

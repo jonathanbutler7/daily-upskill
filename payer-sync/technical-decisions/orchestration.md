@@ -1,8 +1,8 @@
 # Orchestration
 
-How do you coordinate when to kick off work?
+## How do you coordinate when to kick off work?
 
-Options considered
+### Options considered
 
 1. Polling DB for updates to stateful columns
    1. Drawbacks:
@@ -22,8 +22,12 @@ Options considered
       3. No transactional guarantees
       4. Doesn't scale beyond a few replicas
 
-Decision:
+Outbox/deadletter queue-why doesn't it apply?
 
-Postgresql polling.
+## Decision:
 
-Why? Main drawback is not an issue here. Provides transactional guarantees and also scales better than listen/notify
+Postgresql listen/notify.
+
+### Why? 
+
+Main drawback is not an issue here. Provides transactional guarantees and reduces the effort of polling. Uses PostgreSQL as an event driver

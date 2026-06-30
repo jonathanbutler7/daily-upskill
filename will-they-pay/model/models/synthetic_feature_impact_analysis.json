@@ -1,0 +1,61 @@
+{
+  "with_synthetic": {
+    "features": 17,
+    "feature_list": [
+      "amount",
+      "created_day_of_week",
+      "created_day_of_month",
+      "created_hour",
+      "payment_origin_mode",
+      "surchargingenabled",
+      "average_days_to_pay",
+      "is_new_patient",
+      "median_household_income",
+      "poverty_rate_pct",
+      "average_household_size",
+      "bachelors_or_higher_pct",
+      "unemployment_rate_pct",
+      "is_guardian",
+      "account_age_days",
+      "tenure_months",
+      "appointment_reliability_score"
+    ],
+    "roc_auc": 0.9468791876099054,
+    "brier": 0.0777621641755104,
+    "accuracy": 0.8926298501334429
+  },
+  "without_synthetic": {
+    "features": 16,
+    "feature_list": [
+      "amount",
+      "created_day_of_week",
+      "created_day_of_month",
+      "created_hour",
+      "payment_origin_mode",
+      "surchargingenabled",
+      "average_days_to_pay",
+      "is_new_patient",
+      "median_household_income",
+      "poverty_rate_pct",
+      "average_household_size",
+      "bachelors_or_higher_pct",
+      "unemployment_rate_pct",
+      "is_guardian",
+      "account_age_days",
+      "tenure_months"
+    ],
+    "roc_auc": 0.9459701804813166,
+    "brier": 0.07764741778373718,
+    "accuracy": 0.8916033668651201
+  },
+  "delta": {
+    "roc_auc": 0.000909007128588768,
+    "brier": 0.00011474639177322388,
+    "accuracy": 0.0010264832683227754
+  },
+  "impact_assessment": "NEGLIGIBLE",
+  "recommendation": "Synthetic appointment feature adds no value. Safe to remove.",
+  "synthetic_features_tested": [
+    "appointment_reliability_score"
+  ]
+}

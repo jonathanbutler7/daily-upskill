@@ -1,0 +1,26 @@
+flowchart TB
+
+subgraph P1[Part 1 ML Pipeline Ingest Evaluate Store]
+    S1[Onboard location for paid feature]
+    S2[Run historical backfill and nightly incremental ingest]
+    S3[Normalize source data and build features]
+    S4[Run data quality checks]
+    S5[Score with active model]
+    S6[Evaluate scoring quality and drift monitors]
+    S7[Upsert rows into payment_predictions]
+    S8[Optional manual rerun for one patient]
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
+    S8 --> S3
+  end
+
+  subgraph P2[Part 2 FE Request and Go Service Read]
+    R1[Frontend calls GetPaymentLikelihood]
+    R2[Go schema service validates request]
+    R3[(payment_predictions)]
+    R4[Read latest prediction by patient and location]
+    R5[Return has_prediction score risk_band scored_at]
+    R1 --> R2 --> R3 --> R4 --> R2 --> R5
+  end
+
+  S7 --> R3
+  R5 --> S8

@@ -6,10 +6,10 @@ flowchart TD
 
     MATCH_CHECK{Look for matches for\nawaiting_vcc and\nawaiting_era statuses}
 
-    MATCH_CHECK -->|yes| MATCH_FOUND[match found\nstate → MATCHED]
+    MATCH_CHECK -->|yes| MATCH_FOUND[match found\nstate → MATCHED\ncreate reconciled_payment record]
     MATCH_CHECK -->|no| NO_MATCH[no match found]
 
-    MATCH_FOUND --> HANDOFF[Hand off matched pairs to processor\nstate → PROCESSING_PAYMENT]
+    MATCH_FOUND --> HANDOFF([Processor picks up MATCHED records\non its next run])
 
 
     NO_MATCH --> AGE_CHECK{ingested > 5\nbusiness days ago?}

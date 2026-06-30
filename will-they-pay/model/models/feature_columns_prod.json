@@ -1,0 +1,19 @@
+[
+  "amount",
+  "created_day_of_week",
+  "created_day_of_month",
+  "created_hour",
+  "payment_origin_mode",
+  "surchargingenabled",
+  "average_days_to_pay",
+  "is_new_patient",
+  "median_household_income",
+  "poverty_rate_pct",
+  "average_household_size",
+  "bachelors_or_higher_pct",
+  "unemployment_rate_pct",
+  "is_guardian",
+  "account_age_days",
+  "tenure_months",
+  "appointment_reliability_score"
+]

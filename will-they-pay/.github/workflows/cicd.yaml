@@ -1,0 +1,52 @@
+name: CI/CD
+on:
+  push:
+    branches:
+      - '*'
+jobs:
+  Pipeline:
+    name: Pipeline
+    runs-on: [ self-hosted, weave-stable ]
+    permissions:
+      contents: read
+      deployments: write
+      statuses: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Cleanup
+        uses: weave-lab/actions/cleanup@v1
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+        with:
+          path: src
+          fetch-depth: "0"
+      - name: Prep
+        uses: weave-lab/actions/prep@v1
+      - name: Go Lint
+        uses: weave-lab/actions/go/lint@v1
+        # See https://switchboard.weavelab.ninja/catalog/default/component/devx-knowledgebase/docs/lint-checks/ for other `Go Lint` configurations
+      - name: Go Test
+        uses: weave-lab/actions/go/test@v1
+      - name: Go Build
+        uses: weave-lab/actions/go/build@v1
+      - name: Package
+        uses: weave-lab/actions/docker/build@v1
+      - name: Finalize
+        id: finalize
+        if: ${{ always() }}
+        uses: weave-lab/actions/finalize@v1
+    outputs:
+      deployMatrix: ${{ steps.finalize.outputs.deployMatrix }}
+
+  Deploy:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.Pipeline.outputs.deployMatrix }}
+    needs: [ Pipeline ]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.Pipeline.outputs.deployMatrix) }}
+    uses: weave-lab/actions/.github/workflows/deployment.yaml@v1
+    with:
+      deployID: ${{ matrix.deployID }}
+      type: ${{ matrix.type }}
+    secrets: inherit

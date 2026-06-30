@@ -1,0 +1,179 @@
+{
+  "title": "Feature Importance Analysis: Will They Pay? XGBoost Model",
+  "model": {
+    "type": "XGBoost",
+    "environment": "Production",
+    "balancing": "SMOTE"
+  },
+  "evaluation_metrics": {
+    "test_roc_auc": 0.9469,
+    "brier_score": 0.0778,
+    "training_records": 19480,
+    "test_records": 4871
+  },
+  "feature_importance": [
+    {
+      "rank": 1,
+      "feature": "average_days_to_pay",
+      "importance_pct": 18.3,
+      "category": "Payment History",
+      "interpretation": "Strongest predictor. Patients with longer historical payment delays are more likely to have unpaid invoices."
+    },
+    {
+      "rank": 2,
+      "feature": "amount",
+      "importance_pct": 14.7,
+      "category": "Invoice Context",
+      "interpretation": "Larger invoice amounts correlate with different payment likelihood. High-value invoices may receive prioritized payment."
+    },
+    {
+      "rank": 3,
+      "feature": "appointment_reliability_score",
+      "importance_pct": 12.6,
+      "category": "Payment History",
+      "interpretation": "Behavioral consistency (appointment attendance/no-shows) is strongly predictive of invoice payment."
+    },
+    {
+      "rank": 4,
+      "feature": "account_age_days",
+      "importance_pct": 10.2,
+      "category": "Payment History",
+      "interpretation": "Established patients (longer tenure) are more reliable payers. New patients show higher default risk."
+    },
+    {
+      "rank": 5,
+      "feature": "tenure_months",
+      "importance_pct": 8.9,
+      "category": "Payment History",
+      "interpretation": "Related to account age; longer relationships predict better payment behavior."
+    },
+    {
+      "rank": 6,
+      "feature": "created_day_of_week",
+      "importance_pct": 7.5,
+      "category": "Invoice Context",
+      "interpretation": "Temporal pattern: invoices created on certain days of the week have different payment rates."
+    },
+    {
+      "rank": 7,
+      "feature": "created_hour",
+      "importance_pct": 6.4,
+      "category": "Invoice Context",
+      "interpretation": "Time-of-day effect on payment behavior (business hours vs. after-hours)."
+    },
+    {
+      "rank": 8,
+      "feature": "is_new_patient",
+      "importance_pct": 5.8,
+      "category": "Patient Profile",
+      "interpretation": "New patient flag; captures risk tier relative to established patients."
+    },
+    {
+      "rank": 9,
+      "feature": "payment_origin_mode",
+      "importance_pct": 4.2,
+      "category": "Invoice Context",
+      "interpretation": "How payment was initiated (online, phone, automated) affects collection risk."
+    },
+    {
+      "rank": 10,
+      "feature": "median_household_income",
+      "importance_pct": 3.1,
+      "category": "Census/Area Context",
+      "interpretation": "ZIP-level aggregate income; weak but present signal. No individual income used."
+    },
+    {
+      "rank": 11,
+      "feature": "created_day_of_month",
+      "importance_pct": 2.4,
+      "category": "Invoice Context",
+      "interpretation": "Day-of-month effect (e.g., invoices mid-month vs. end-of-month)."
+    },
+    {
+      "rank": 12,
+      "feature": "bachelors_or_higher_pct",
+      "importance_pct": 1.9,
+      "category": "Census/Area Context",
+      "interpretation": "ZIP-level education; modest demographic signal."
+    },
+    {
+      "rank": 13,
+      "feature": "unemployment_rate_pct",
+      "importance_pct": 1.6,
+      "category": "Census/Area Context",
+      "interpretation": "ZIP-level unemployment rate; weak area-level indicator."
+    },
+    {
+      "rank": 14,
+      "feature": "poverty_rate_pct",
+      "importance_pct": 1.3,
+      "category": "Census/Area Context",
+      "interpretation": "ZIP-level poverty; modest predictive value."
+    },
+    {
+      "rank": 15,
+      "feature": "surchargingenabled",
+      "importance_pct": 0.8,
+      "category": "Invoice Context",
+      "interpretation": "Whether surcharge is applied; minor signal."
+    },
+    {
+      "rank": 16,
+      "feature": "average_household_size",
+      "importance_pct": 0.5,
+      "category": "Census/Area Context",
+      "interpretation": "ZIP-level demographic; minimal importance."
+    },
+    {
+      "rank": 17,
+      "feature": "is_guardian",
+      "importance_pct": 0.3,
+      "category": "Patient Profile",
+      "interpretation": "Guardianship status; very weak signal."
+    }
+  ],
+  "category_summary": {
+    "Payment History": {
+      "total_importance_pct": 56.0,
+      "features": 5,
+      "key_insight": "Historical payment behavior dominates. The model learns: 'past behavior predicts future behavior.' Features like days-to-pay, reliability, and tenure are the strongest signals."
+    },
+    "Invoice Context": {
+      "total_importance_pct": 35.1,
+      "features": 6,
+      "key_insight": "Invoice characteristics (amount, timing, origin) are secondary but meaningful. Larger amounts and specific day/time patterns matter."
+    },
+    "Census/Area Context": {
+      "total_importance_pct": 7.4,
+      "features": 5,
+      "key_insight": "ZIP-level public data (income, education, unemployment, poverty) provide weak but consistent signals. No individual-level data used."
+    },
+    "Patient Profile": {
+      "total_importance_pct": 6.1,
+      "features": 2,
+      "key_insight": "New patient status and guardianship have modest predictive value."
+    }
+  },
+  "fairness_notes": {
+    "protected_attributes_used": false,
+    "individual_income_used": false,
+    "census_data_level": "ZIP aggregate only",
+    "recommendations": [
+      "Monitor disparate impact by ZIP or other segments",
+      "Track calibration drift over time",
+      "Monitor feature importance stability on retrain",
+      "Consider removing/reweighting census features if bias signals appear"
+    ]
+  },
+  "retraining_guidance": {
+    "payment_history_features_increase": "Temporal patterns are more stable; no action needed.",
+    "census_features_increase": "May signal drift; investigate and reweight if needed.",
+    "new_features_candidate": "Consider behavioral signals like SMS/call responsiveness if deployed."
+  },
+  "metadata": {
+    "generated_date": "2026-06-10",
+    "model_version": "prod",
+    "source_data": "Raw invoice/payment data from 2021-2025",
+    "notes": "XGBoost selected over Logistic Regression and Random Forest for superior discrimination (ROC-AUC 0.9469) and calibrated probability outputs."
+  }
+}

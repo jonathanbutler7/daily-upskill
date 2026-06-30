@@ -1,0 +1,21 @@
+schema: "2"
+name: will-they-pay-service
+slug: will-they-pay-service
+owner: acl-dev-team-payments@getweave.com
+productFeature: payments
+slack: "#payments-alerts"
+namespace: will-they-pay-service
+description: help understand the likelhood a customer will pay
+defaults:
+  - match: "*"
+    schemas:
+      - path: payments-platform/will-they-pay/v1
+        ref: will-they-pay
+        public: true
+deploy:
+  wsf-dev-0-gke1-west4:
+    resources:
+        scaling:
+          replicas: 2
+    featureFlags:
+      cloudsql-client: true

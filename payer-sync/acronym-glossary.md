@@ -3,7 +3,7 @@
 * **ACH**: Automated Clearing House  
 * **API**: Application Programming Interface  
 * **BPR**: Payment Info (ERA Segment)  
-* **CAS**: Adjustments (ERA Segment)  
+* **CAS**: Claim Adjustments Segment (ERA Segment)  
 * **CLP**: Claim-Level Payment (ERA Segment)  
 * **CSV**: Comma Separated Values  
 * **CVV**: Card Verification Value  

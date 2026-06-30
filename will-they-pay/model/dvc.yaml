@@ -1,0 +1,28 @@
+stages:
+  build_training_data_prod:
+    cmd: jupyter nbconvert --to notebook --execute notebooks/production/build_training_data_prod.ipynb --output /tmp/build_training_data_prod.executed.ipynb
+    deps:
+      - notebooks/production/build_training_data_prod.ipynb
+      - data/raw/invoice_cohorts/invoices_2025-04-20.csv
+      - data/raw/invoice_cohorts/payment_rows_2025-04-20.csv
+      - data/raw/invoice_cohorts/person_invoice_history_2025-04-20.csv
+      - data/processed/prod_dummy_persons.csv
+      - data/processed/prod_dummy_addresses.csv
+      - data/processed/prod_dummy_calendar_events.csv
+      - data/processed/census_zip_features_model_ready.csv
+
+  train_model_prod:
+    cmd: jupyter nbconvert --to notebook --execute notebooks/production/train_model_prod.ipynb --output /tmp/train_model_prod.executed.ipynb
+    deps:
+      - notebooks/production/train_model_prod.ipynb
+      - data/processed/training_data_prod.csv
+    metrics:
+      - models/eval_summary_prod.json
+
+  score_batch:
+    cmd: python scripts/score_batch.py
+    deps:
+      - scripts/score_batch.py
+      - models/will_they_pay_prod_v1.joblib
+      - models/feature_columns_prod.json
+      - data/processed/training_data_prod.csv

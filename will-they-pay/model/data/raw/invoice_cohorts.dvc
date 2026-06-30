@@ -1,0 +1,6 @@
+outs:
+- md5: 2ceb9f88fb41823498e99b2fb3fac96a.dir
+  size: 16456640
+  nfiles: 3
+  hash: md5
+  path: invoice_cohorts

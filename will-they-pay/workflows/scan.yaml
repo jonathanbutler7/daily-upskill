@@ -1,0 +1,9 @@
+name: Scan
+on: [ push, pull_request ]
+jobs:
+  Scan:
+    uses: weave-lab/public-actions/.github/workflows/scan.yaml@main
+    secrets:
+      GITHUBACTIONSTOKEN: ${{secrets.GITHUBACTIONSTOKEN}}
+      SCAN_TOKEN: ${{secrets.SCAN_TOKEN}}
+

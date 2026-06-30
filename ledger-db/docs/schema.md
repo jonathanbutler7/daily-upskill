@@ -14,16 +14,19 @@ the container for sending or receiving money
 - id PK
 - name: string
 - description: string
-- balance: number (cents)
-- normal_balance: debit | credit
-- user_id: no user entity here, but this calls out the gap
+- currency_code
+- balance: number
+
+#### Out of scope
+- allow_negative_balance 
+- user_id
 
 ### Transaction
 the business event container
 - id PK
 - type: transfer | reversal
-- status: posted | fail | etc.
 - idempotency_key
+- created_at
 
 ### Entry
 child record of a transaction. 
@@ -32,6 +35,7 @@ the accounting lines inside the transaction event
 - transaction_id FK -> transaction.id
 - account_id FK -> account.id
 - amount
+- created_at
 
 ### Reversal
 a transaction initiated internally to correct a ledger

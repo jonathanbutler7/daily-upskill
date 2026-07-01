@@ -17,26 +17,41 @@ declare
     to_currency char(3);
 begin
 
-    -- Manually validate idempotency_key is unique
-    -- for better UX. Postgres will prevent duplicates
-    -- by returning a UNIQUE constraint error on the
-    -- idempotency_key field. But the product requirement
-    -- is to return a value rather than an error. Handle
-    -- it here rather than application layer because a
-    -- request retry should not move money twice.
+    -- Validate amount > 0.
+    if transfer_amount <= 0 then
+        raise exception 'amount must be greater than zero';
+    end if;
+
+    -- If this request already posted, return
+    -- the existing transaction id instead of
+    -- moving money again.
     select id
         into existing_transaction_id
     from ledger_transactions
     where ledger_transactions.idempotency_key = post_transfer.idempotency_key;
 
+    -- pg sleep allows us to test concurrent transaction and make sure
+    -- race conditions are handled correctly by idempotency
+    -- perform pg_sleep(5);
+
     if existing_transaction_id is not null then
         return existing_transaction_id;
     end if;
 
-    -- Validate amount > 0.
-    if transfer_amount <= 0 then
-        raise exception 'amount must be greater than zero';
-    end if;
+    -- Insert transaction.
+    begin
+        insert into ledger_transactions (type, idempotency_key)
+        values ('transfer', idempotency_key)
+        returning id into new_transaction_id;
+    exception
+        when unique_violation then
+            select id
+            into existing_transaction_id
+            from ledger_transactions
+            where ledger_transactions.idempotency_key = post_transfer.idempotency_key;
+    
+            return existing_transaction_id;
+    end;
 
     -- Look up the from account.
     select balance, currency_code
@@ -45,7 +60,7 @@ begin
     where id = from_account_id
     for update;
 
-    if not found then 
+    if not found then
         raise exception 'from account not found';
     end if;
 
@@ -59,7 +74,7 @@ begin
     if not found then
         raise exception 'to account not found';
     end if;
-    
+
     -- Check currencies match.
     if from_currency <> to_currency then
         raise exception 'currency mismatch';
@@ -69,11 +84,6 @@ begin
     if from_balance < transfer_amount then
         raise exception 'insufficient funds';
     end if;
-    
-    -- Insert transaction.
-    insert into ledger_transactions (type, idempotency_key)
-    values ('transfer', idempotency_key)
-    returning id into new_transaction_id;
 
     -- Insert entries.
     insert into ledger_entries (transaction_id, account_id, amount)

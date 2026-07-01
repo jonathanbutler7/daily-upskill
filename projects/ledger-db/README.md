@@ -1,5 +1,7 @@
 # Ledger DB
 
+See [success criteria](docs/success-criteria.md) for the end state of this project.
+
 ## Local setup
 
 This project is using a local Homebrew Postgres install.

@@ -1,3 +1,7 @@
+drop table if exists ledger_entries;
+drop table if exists ledger_transactions;
+drop table if exists ledger_accounts;
+
 create table ledger_accounts (
     id bigserial primary key,
     name text not null,
@@ -13,7 +17,11 @@ create table ledger_transactions (
     -- type will be transfer | reversal
     type text not null,
     idempotency_key text not null unique,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    from_account_id bigint not null references ledger_accounts(id),
+    to_account_id bigint not null references ledger_accounts(id),
+    amount bigint not null,
+    currency_code char(3) not null
 );
 
 create table ledger_entries (

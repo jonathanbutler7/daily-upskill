@@ -29,9 +29,9 @@ Specifically:
    - [x] Sequential idempotency works.
    - [x] Concurrent idempotency works.
    - [x] Reusing an idempotency key with different request fields fails.
-   - [ ] Add scenario output for mismatched idempotency keys.
-   - [ ] Add scenario output for insufficient funds.
-   - [ ] Add notes for the concurrent idempotency test.
+   - [x] Add `scenario` output for mismatched idempotency keys.
+   - [x] Add `scenario` output for insufficient funds.
+   - [x] Add notes for the concurrent idempotency test.
 
 2. Add balance checks.
    - [ ] Write a query or view that derives account balances from entries.

@@ -1,12 +1,13 @@
 -- local/dev only
-truncate table ledger_entries, ledger_transactions, ledger_accounts restart identity;
+truncate table ledger_entries, ledger_transactions, ledger_accounts, external_transfers restart identity;
 
 insert into ledger_accounts (name, description, currency_code, balance)
 values
     ('Alice', 'Alice wallet', 'USD', 0),
-    ('Bob', 'Bob wallet', 'USD', 0);
+    ('Bob', 'Bob wallet', 'USD', 0),
+    ('Cash Settlement', 'Internal account to keep double entry book keeping for bank transfers', 'USD', 0);
 
-select add_balance(1, 2000, 'seed-alice-2000') as deposit_transaction_id;
+select add_balance(1, 2000, 'ach',  'seed-alice-2000-ext', 'seed-alice-2000') as deposit_transaction_id;
 select post_transfer(1, 2, 1000, 'alice-sends-bob-1000') as transfer_transaction_id;
 
 select id, name, currency_code, balance

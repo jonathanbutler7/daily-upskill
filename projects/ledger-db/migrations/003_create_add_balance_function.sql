@@ -1,8 +1,10 @@
-drop function if exists add_balance(bigint, bigint, text);
+drop function if exists add_balance(bigint, bigint, text, text, text);
 
 create function add_balance(
     to_account_id bigint,
     transfer_amount bigint,
+    rail text,
+    external_reference text,
     idempotency_key text
 )
 returns bigint
@@ -14,10 +16,17 @@ declare
     new_transaction_id bigint;
     to_currency char(3);
 begin
+    -- Validate the amount is greater than zero
     if transfer_amount <= 0 then
         raise exception 'amount must be greater than zero';
     end if;
+    
+    -- Validate the external_reference value
+    if external_reference is null or btrim(external_reference) = '' then
+        raise exception 'external reference must not be empty';
+    end if;
 
+    -- Validate the to_account_id exists and lock row
     select currency_code
     into to_currency
     from ledger_accounts
@@ -28,26 +37,21 @@ begin
         raise exception 'to account not found';
     end if;
 
-    -- This is a learning-project shortcut. The funding account represents
-    -- money entering the ledger so deposit entries can still balance to zero.
+    -- Locate the internal settlement account. It would be good
+    -- to have a list of known ids for the internal settlement
+    -- accounts.
     select id
     into funding_account_id
     from ledger_accounts
-    where name = 'External Funding'
+    where name = 'Cash Settlement'
         and currency_code = to_currency
     for update;
 
-    if funding_account_id is null then
-        insert into ledger_accounts (name, description, currency_code, balance)
-        values (
-            'External Funding',
-            'Hack for this exercise: source account for deposits and opening balances',
-            to_currency,
-            0
-        )
-        returning id into funding_account_id;
+    if not found then
+        raise exception 'Cash Settlement account not found';
     end if;
 
+    -- check same idempotency request
     select id
     into existing_transaction_id
     from ledger_transactions lt
@@ -61,7 +65,8 @@ begin
     if existing_transaction_id is not null then
         return existing_transaction_id;
     end if;
-
+    
+    -- check same idempotency conflict
     select id
     into existing_transaction_id
     from ledger_transactions lt
@@ -71,6 +76,7 @@ begin
         raise exception 'idempotency key reused with different request';
     end if;
 
+    -- insert ledger_transaction
     insert into ledger_transactions (
         type,
         idempotency_key,
@@ -88,12 +94,14 @@ begin
         to_currency
     )
     returning id into new_transaction_id;
-
+    
+    -- insert ledger entries
     insert into ledger_entries (transaction_id, account_id, amount)
     values
         (new_transaction_id, funding_account_id, -transfer_amount),
         (new_transaction_id, to_account_id, transfer_amount);
-
+    
+    -- update balances
     update ledger_accounts
     set balance = balance - transfer_amount
     where id = funding_account_id;
@@ -101,6 +109,13 @@ begin
     update ledger_accounts
     set balance = balance + transfer_amount
     where id = to_account_id;
+
+    -- insert row into external_transfers table
+    insert into external_transfers (direction, rail, status, external_reference, to_account_id, ledger_transaction_id, amount, currency_code, completed_at);
+    values (
+        'deposit', rail, 'posted', external_reference, funding_account_id, new_transaction_id, transfer_amount, to_currency, now() 
+    )
+    -- returning id into funding_account_id;
 
     return new_transaction_id;
 end;

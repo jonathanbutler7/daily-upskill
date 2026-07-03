@@ -111,10 +111,11 @@ begin
     where id = to_account_id;
 
     -- insert row into external_transfers table
-    insert into external_transfers (direction, rail, status, external_reference, to_account_id, ledger_transaction_id, amount, currency_code, completed_at);
+    insert into external_transfers (direction, rail, status, external_reference, user_account_id, ledger_transaction_id, amount, currency_code, completed_at)
     values (
-        'deposit', rail, 'posted', external_reference, funding_account_id, new_transaction_id, transfer_amount, to_currency, now() 
-    )
+        'deposit', rail, 'posted', external_reference, to_account_id, new_transaction_id, transfer_amount, to_currency, now() 
+    );
+    
     -- returning id into funding_account_id;
 
     return new_transaction_id;

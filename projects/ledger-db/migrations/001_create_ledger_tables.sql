@@ -20,7 +20,7 @@ create table ledger_transactions (
     created_at timestamptz not null default now(),
     from_account_id bigint not null references ledger_accounts(id),
     to_account_id bigint not null references ledger_accounts(id),
-    amount bigint not null,
+    amount bigint not null check (amount > 0),
     currency_code char(3) not null
 );
 

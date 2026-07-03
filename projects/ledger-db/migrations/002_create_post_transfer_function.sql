@@ -17,11 +17,6 @@ declare
     to_currency char(3);
 begin
 
-    -- Validate amount > 0.
-    if transfer_amount <= 0 then
-        raise exception 'amount must be greater than zero';
-    end if;
-
     -- Look up and lock the from account.
     select balance, currency_code
     into from_balance, from_currency

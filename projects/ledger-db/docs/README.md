@@ -1,6 +1,6 @@
 # Docs
 
-This director contains md files that are a result of brainstorming the concept and theory of a ledger db with Codex.
+This directory contains notes and decisions for the ledger project.
 
 ## Concepts
 
@@ -24,9 +24,17 @@ Examples of
 
 The beginnings of an ERD with fields and relationships sketched out.
 
+## System Boundaries
+
+See [system-boundaries.md](system-boundaries.md) for the current decision on what belongs in Go and what belongs in Postgres.
+
+Short version:
+
+- Postgres owns durable ledger invariants.
+- Go owns commands, workflows, retries, and caller-facing errors.
+- Some rules exist in both places, but for different reasons.
+
 ### Out of scope
 
-- retries
 - users
 - entity states
-

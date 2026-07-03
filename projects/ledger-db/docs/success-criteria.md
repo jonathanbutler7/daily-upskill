@@ -8,7 +8,7 @@ This is still a learning project, but it should not be a toy ledger. By the end,
 
 The project is done when it can post, reject, reverse, and reconcile ledger activity through clear application and database boundaries, and when the docs explain which guarantees are implemented versus only recognized as production requirements.
 
-This project should be strong enough to talk through as an industry-style ledger database POC.
+This project should be strong enough to talk through as an industry-style ledger POC.
 
 ## Core Ledger Requirements
 
@@ -50,19 +50,19 @@ Money can enter or leave this ledger, but the ledger still has to stay balanced.
 
 ## System Boundary Requirements
 
-The project should make a deliberate choice about what belongs in Go and what belongs in Postgres.
+The project should make a deliberate choice about what belongs in Go and what belongs in Postgres. The goal is not "Postgres first." The goal is to put each rule where it can be enforced clearly and safely.
 
-- [ ] Postgres owns durable ledger storage.
-- [ ] Postgres owns foreign keys, uniqueness, basic checks, and transaction atomicity.
-- [ ] Postgres owns the final protection against corrupted ledger state.
-- [ ] Go owns the public command/API shape.
-- [ ] Go owns request parsing and request-level validation.
-- [ ] Go owns idempotency behavior from the caller's point of view.
-- [ ] Go owns error mapping into stable application errors.
-- [ ] Go owns orchestration for multi-step workflows.
-- [ ] Go owns retry behavior, worker behavior, and external integration flow.
-- [ ] The docs explain which invariants are enforced in the database and which rules are enforced in Go.
-- [ ] The docs explain why each boundary was chosen.
+- [x] The docs explain that Postgres owns durable ledger storage.
+- [x] The docs explain that Postgres owns foreign keys, uniqueness, basic checks, and transaction atomicity.
+- [x] The docs explain that Postgres owns final checks that cannot rely on stale application reads.
+- [x] The docs explain that Go owns the public command/API shape.
+- [x] The docs explain that Go owns request parsing and request-level validation.
+- [x] The docs explain that Go owns idempotency behavior from the caller's point of view.
+- [x] The docs explain that Go owns error mapping into stable application errors.
+- [x] The docs explain that Go owns orchestration for multi-step workflows.
+- [x] The docs explain that Go owns retry behavior, worker behavior, and external integration flow.
+- [x] The docs explain which invariants are enforced in the database and which rules are enforced in Go.
+- [x] The docs explain why each boundary was chosen.
 - [ ] The project has at least one ledger operation exposed through Go instead of only direct `psql` calls.
 - [ ] The project still proves the underlying database behavior with SQL scenarios.
 

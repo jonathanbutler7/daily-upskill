@@ -16,11 +16,13 @@ const (
 )
 
 var (
+	// request validation errors
 	ErrFromAccountIDRequired  = errors.New("from account id is required")
 	ErrToAccountIDRequired    = errors.New("to account id is required")
 	ErrAmountGreaterThanZero  = errors.New("amount must be greater than 0")
 	ErrIdempotencyKeyRequired = errors.New("idempotency key is required")
 
+	// db errors
 	ErrInsufficientFunds   = errors.New("insufficient funds")
 	ErrIdempotencyConflict = errors.New("idempotency conflict")
 	ErrFromAccountNotFound = errors.New("from account not found")

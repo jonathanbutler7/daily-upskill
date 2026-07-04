@@ -16,17 +16,17 @@ declare
     new_transaction_id bigint;
     to_currency char(3);
 begin
-    -- Validate the amount is greater than zero
+    -- Validate the amount is greater than zero.
     if transfer_amount <= 0 then
         raise exception 'amount must be greater than zero';
     end if;
     
-    -- Validate the external_reference value
+    -- Validate the external_reference value.
     if external_reference is null or btrim(external_reference) = '' then
         raise exception 'external reference must not be empty';
     end if;
 
-    -- Validate the to_account_id exists and lock row
+    -- Validate the to_account_id exists and lock row.
     select currency_code
     into to_currency
     from ledger_accounts
@@ -37,9 +37,7 @@ begin
         raise exception 'to account not found';
     end if;
 
-    -- Locate the internal settlement account. It would be good
-    -- to have a list of known ids for the internal settlement
-    -- accounts.
+    -- Locate the internal settlement account.
     select id
     into funding_account_id
     from ledger_accounts
@@ -51,7 +49,7 @@ begin
         raise exception 'Cash Settlement account not found';
     end if;
 
-    -- check same idempotency request
+    -- Check same idempotency request.
     select id
     into existing_transaction_id
     from ledger_transactions lt
@@ -66,7 +64,7 @@ begin
         return existing_transaction_id;
     end if;
     
-    -- check same idempotency conflict
+    -- Check same idempotency conflict.
     select id
     into existing_transaction_id
     from ledger_transactions lt
@@ -76,7 +74,7 @@ begin
         raise exception 'idempotency key reused with different request';
     end if;
 
-    -- insert ledger_transaction
+    -- Insert ledger transaction.
     insert into ledger_transactions (
         type,
         idempotency_key,
@@ -95,13 +93,13 @@ begin
     )
     returning id into new_transaction_id;
     
-    -- insert ledger entries
+    -- Insert ledger entries.
     insert into ledger_entries (transaction_id, account_id, amount)
     values
         (new_transaction_id, funding_account_id, -transfer_amount),
         (new_transaction_id, to_account_id, transfer_amount);
     
-    -- update balances
+    -- Update balances.
     update ledger_accounts
     set balance = balance - transfer_amount
     where id = funding_account_id;
@@ -110,14 +108,30 @@ begin
     set balance = balance + transfer_amount
     where id = to_account_id;
 
-    -- insert row into external_transfers table
-    insert into external_transfers (direction, rail, status, external_reference, user_account_id, ledger_transaction_id, amount, currency_code, completed_at)
+    -- Insert row into external_transfers table.
+    insert into external_transfers (
+        direction, 
+        rail, 
+        status, 
+        external_reference, 
+        user_account_id, 
+        ledger_transaction_id, 
+        amount,
+        currency_code,
+        completed_at
+    )
     values (
-        'deposit', rail, 'posted', external_reference, to_account_id, new_transaction_id, transfer_amount, to_currency, now() 
+        'deposit', 
+        rail, 
+        'posted',
+        external_reference, 
+        to_account_id, 
+        new_transaction_id, 
+        transfer_amount,
+        to_currency,
+        now()
     );
     
-    -- returning id into funding_account_id;
-
     return new_transaction_id;
 end;
 $$;

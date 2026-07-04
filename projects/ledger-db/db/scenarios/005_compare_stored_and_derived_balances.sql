@@ -1,3 +1,17 @@
+-- local/dev only
+truncate table external_transfers, ledger_entries, ledger_transactions, ledger_accounts restart identity;
+
+\ir ../migrations/003_seed_system_accounts.sql
+
+insert into ledger_accounts(name, description, currency_code, balance)
+values
+    ('Alice', 'Alice Wallet', 'USD', 0),
+    ('Bob', 'Bob Wallet', 'USD', 0);
+
+select add_balance(2, 2000, 'ach', 'alice-balance-check-seed-ext', 'alice-balance-check-seed') as deposit_transaction_id;
+select post_transfer(2, 3, 1000, 'alice-sends-bob-1000') as first_transfer_transaction_id;
+select post_transfer(2, 3, 200, 'alice-sends-bob-200') as second_transfer_transaction_id;
+
 select
     le.account_id,
     sum(le.amount) as derived_balance,
@@ -8,14 +22,31 @@ group by le.account_id, la.balance
 order by le.account_id;
 
 -- RESULT
--- 
--- account_id | derived_balance | stored_balance
+-- TRUNCATE TABLE
+-- INSERT 0 1
+-- INSERT 0 2
+--  deposit_transaction_id
+-- ------------------------
+--                       1
+-- (1 row)
+--
+--  first_transfer_transaction_id
+-- -------------------------------
+--                              2
+-- (1 row)
+--
+--  second_transfer_transaction_id
+-- --------------------------------
+--                               3
+-- (1 row)
+--
+--  account_id | derived_balance | stored_balance
 -- ------------+-----------------+----------------
---          1 |             800 |            800
---          2 |            1200 |           1200
---          3 |           -2000 |          -2000
+--          1 |           -2000 |          -2000
+--          2 |             800 |            800
+--          3 |            1200 |           1200
 -- 
--- CONTEXT
+-- PREVIOUS CONTEXT
 -- ledger_db=> select * from ledger_accounts;
 --  id |       name       |                               description                                | currency_code | balance |          created_at
 -- ----+------------------+--------------------------------------------------------------------------+---------------+---------+-------------------------------

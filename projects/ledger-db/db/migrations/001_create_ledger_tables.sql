@@ -1,3 +1,4 @@
+drop table if exists external_transfers;
 drop table if exists ledger_entries;
 drop table if exists ledger_transactions;
 drop table if exists ledger_accounts;

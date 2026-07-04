@@ -17,9 +17,16 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+	
 	tID, err := cmd.PostTransfer(ctx, db, 1, 2, 100000, "a-key-112")
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(tID)
+	fmt.Println("post transfer id", tID)
+
+	tID, err = cmd.AddBalance(ctx, db, 1, 10000, "ach", "external-id", "a-key-113")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("add balance id", tID)
 }

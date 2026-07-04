@@ -35,17 +35,17 @@ This project should be strong enough to talk through as an industry-style ledger
 Money can enter or leave this ledger, but the ledger still has to stay balanced. A real ledger does not add money with a one-sided balance update.
 
 - [x] The project recognizes that ledger accounts should start at `0`.
-- [x] The project has a temporary `External Funding` account for opening balances and deposits.
-- [ ] Replace the `External Funding` shortcut with a clearer external-money model.
-- [ ] External bank accounts, card networks, processors, or payment rails should not be treated as normal user ledger accounts.
-- [ ] The ledger should use an internal account, such as cash, settlement, clearing, external funds, or processor receivable, to represent money controlled or expected by the system.
-- [ ] A deposit posts balanced entries between the receiving user account and the internal funding or settlement account.
+- [x] The project has a `Cash Settlement` system account for settled deposits.
+- [x] Replace the `External Funding` shortcut with a clearer external-money model.
+- [x] External bank accounts, card networks, processors, or payment rails should not be treated as normal user ledger accounts.
+- [x] The ledger should use an internal account, such as cash, settlement, clearing, external funds, or processor receivable, to represent money controlled or expected by the system.
+- [x] A deposit posts balanced entries between the receiving user account and the internal funding or settlement account.
 - [ ] A withdrawal posts balanced entries between the sending user account and the internal funding or settlement account.
-- [ ] External payment identifiers should be stored separately from ledger entries.
+- [x] External payment identifiers should be stored separately from ledger entries.
 - [ ] External payment status should be reconciled against ledger activity.
 - [ ] The docs explain the difference between an external real-world account and an internal ledger account that represents that external relationship.
 - [ ] The docs explain whether deposits are posted only after settlement or first posted as pending/clearing activity.
-- [ ] The project has a scenario showing money entering the ledger from an external source.
+- [x] The project has a scenario showing money entering the ledger from an external source.
 - [ ] The project has a scenario showing the external reference used to reconcile that deposit.
 
 ## System Boundary Requirements
@@ -63,8 +63,8 @@ The project should make a deliberate choice about what belongs in Go and what be
 - [x] The docs explain that Go owns retry behavior, worker behavior, and external integration flow.
 - [x] The docs explain which invariants are enforced in the database and which rules are enforced in Go.
 - [x] The docs explain why each boundary was chosen.
-- [ ] The project has at least one ledger operation exposed through Go instead of only direct `psql` calls.
-- [ ] The project still proves the underlying database behavior with SQL scenarios.
+- [x] The project has at least one ledger operation exposed through Go instead of only direct `psql` calls.
+- [x] The project still proves the underlying database behavior with SQL scenarios.
 
 ## Reversal Requirements
 
@@ -79,12 +79,12 @@ The project should make a deliberate choice about what belongs in Go and what be
 
 - [x] There is a query or view that derives balances from entries.
 - [x] There is a scenario comparing derived balances to `ledger_accounts.balance`.
-- [ ] Balance comparison should return no mismatches after valid scenarios.
+- [x] Balance comparison should return no mismatches after valid scenarios.
 - [ ] The docs explain why stored balances exist if entries are the audit record.
 - [ ] The docs explain what happens if stored balances and derived balances disagree.
 - [ ] There is a true-up or repair plan, even if it is manual for this project.
 - [ ] The project names which transaction states count toward derived balances.
-- [ ] External funding or deposit transactions can be tied back to an external reference.
+- [x] External funding or deposit transactions can be tied back to an external reference.
 - [ ] The project can identify ledger deposits that do not have a matching external event.
 - [ ] The project can identify external events that were not posted to the ledger.
 
@@ -94,10 +94,10 @@ The project should make a deliberate choice about what belongs in Go and what be
 - [x] Transfers lock the destination account before posting entries.
 - [x] Request identity fields are stored on `ledger_transactions` for idempotency checks.
 - [x] `idempotency_key` is unique.
-- [ ] Amounts must be positive where business rules require positive request amounts.
-- [ ] Entry amounts must never be zero.
-- [ ] Account currency must match transaction currency.
-- [ ] A transaction should not move money across currencies unless an FX flow exists.
+- [x] Amounts must be positive where business rules require positive request amounts.
+- [x] Entry amounts must never be zero.
+- [x] Account currency must match transaction currency.
+- [x] A transaction should not move money across currencies unless an FX flow exists.
 - [ ] Transaction `type` should be constrained to known values.
 - [ ] Currency codes should be constrained to a known format.
 - [ ] The project should document whether it relies on constraints, triggers, permissions, or function-only writes for each invariant.
@@ -110,11 +110,11 @@ The Go layer does not need to be a full production API, but it should be real en
 - [ ] Define Go types for ledger commands, results, and application errors.
 - [ ] Expose a transfer command through a small HTTP API or CLI.
 - [ ] Expose a deposit or funding command through a small HTTP API or CLI.
-- [ ] Validate request shape before calling the database.
-- [ ] Pass idempotency keys through from the caller to the posting path.
-- [ ] Return the original transaction for a repeated idempotent request.
-- [ ] Return a clear conflict error for idempotency-key misuse.
-- [ ] Return a clear insufficient-funds error.
+- [x] Validate request shape before calling the database.
+- [x] Pass idempotency keys through from the caller to the posting path.
+- [x] Return the original transaction for a repeated idempotent request.
+- [x] Return a clear conflict error for idempotency-key misuse.
+- [x] Return a clear insufficient-funds error.
 - [ ] Keep database errors from leaking directly to callers.
 - [ ] Use database transactions deliberately from Go where Go owns orchestration.
 - [ ] Add tests around the Go boundary for success, retry, conflict, and insufficient funds.
@@ -125,7 +125,7 @@ The Go layer does not need to be a full production API, but it should be real en
 Each important rule should have a small SQL scenario that can be run through `psql`.
 
 - [x] Happy path transfer.
-- [ ] Money entering the ledger from an external source.
+- [x] Money entering the ledger from an external source.
 - [x] Insufficient funds.
 - [x] Sequential idempotency retry.
 - [x] Concurrent idempotency retry.
@@ -201,9 +201,9 @@ These are not required to build during this phase.
 
 ## Exercise Shortcut
 
-`add_balance` uses an internal `External Funding` account so deposits can satisfy the current `from_account_id` constraint and still create balanced entries.
+`add_balance` uses an internal `Cash Settlement` account so deposits can satisfy the current `from_account_id` constraint and still create balanced entries.
 
-That account is a learning-project shortcut. The real version should model external money movement more deliberately:
+That account is an internal ledger account. External money movement is tracked separately through `external_transfers`:
 
 - The outside bank account, card network, or processor is not itself a normal user ledger account.
 - The ledger uses an internal cash, settlement, clearing, or receivable account to keep entries balanced.

@@ -30,24 +30,28 @@ var (
 	ErrCurrencyMismatch    = errors.New("currency mismatch")
 )
 
+type TransferCommand struct {
+	FromAccountID  int64
+	ToAccountID    int64
+	Amount         int64
+	IdempotencyKey string
+}
+
 func PostTransfer(
 	ctx context.Context,
 	db *sql.DB,
-	fromAccountID,
-	toAccountID,
-	amount int64,
-	idempotencyKey string,
+	cmd TransferCommand,
 ) (int64, error) {
-	if fromAccountID <= 0 {
+	if cmd.FromAccountID <= 0 {
 		return 0, ErrFromAccountIDRequired
 	}
-	if toAccountID <= 0 {
+	if cmd.ToAccountID <= 0 {
 		return 0, ErrToAccountIDRequired
 	}
-	if amount <= 0 {
+	if cmd.Amount <= 0 {
 		return 0, ErrAmountGreaterThanZero
 	}
-	if idempotencyKey == "" {
+	if cmd.IdempotencyKey == "" {
 		return 0, ErrIdempotencyKeyRequired
 	}
 
@@ -55,7 +59,7 @@ func PostTransfer(
 	err := db.QueryRowContext(
 		ctx,
 		`select post_transfer($1, $2, $3, $4)`,
-		fromAccountID, toAccountID, amount, idempotencyKey,
+		cmd.FromAccountID, cmd.ToAccountID, cmd.Amount, cmd.IdempotencyKey,
 	).Scan(&transactionID)
 	if err != nil && strings.Contains(err.Error(), dbErrInsufficientFunds) {
 		return 0, ErrInsufficientFunds
@@ -71,6 +75,10 @@ func PostTransfer(
 	}
 	if err != nil && strings.Contains(err.Error(), dbErrCurrencyMismatch) {
 		return 0, ErrCurrencyMismatch
+	}
+	// fallback to return unknown errors
+	if err != nil {
+		return 0, err
 	}
 
 	return transactionID, nil

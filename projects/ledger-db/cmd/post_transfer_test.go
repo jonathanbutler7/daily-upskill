@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestPostTransfer(t *testing.T) {
+func TestPostTransferRequestValidation(t *testing.T) {
 	ctx := t.Context()
 	tests := []struct {
 		name           string
@@ -51,7 +51,14 @@ func TestPostTransfer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := PostTransfer(
-				ctx, nil, tt.fromAccountID, tt.toAccountID, tt.amount, tt.idempotencyKey,
+				ctx,
+				nil,
+				TransferCommand{
+					FromAccountID:  tt.fromAccountID,
+					ToAccountID:    tt.toAccountID,
+					Amount:         tt.amount,
+					IdempotencyKey: tt.idempotencyKey,
+				},
 			)
 			if err == nil {
 				t.Fatal("expected error")

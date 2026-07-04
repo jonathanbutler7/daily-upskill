@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestAddBalance(t *testing.T) {
+func TestAddBalanceRequestValidation(t *testing.T) {
 	ctx := t.Context()
 	tests := []struct {
 		name                string
@@ -65,7 +65,15 @@ func TestAddBalance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := AddBalance(
-				ctx, nil, tt.toAccountID, tt.amount, tt.rail, tt.externalReferenceID, tt.idempotencyKey,
+				ctx,
+				nil,
+				AddBalanceCommand{
+					ToAccountID:         tt.toAccountID,
+					TransferAmount:      tt.amount,
+					Rail:                tt.rail,
+					ExternalReferenceID: tt.externalReferenceID,
+					IdempotencyKey:      tt.idempotencyKey,
+				},
 			)
 			if err == nil {
 				t.Fatal("expected error")

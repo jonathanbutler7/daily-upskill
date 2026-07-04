@@ -24,25 +24,32 @@ var (
 	ErrCashSettlementAccountNotFound = errors.New(dbErrCashSettlementAccountNotFound)
 )
 
+type AddBalanceCommand struct {
+	ToAccountID         int64
+	TransferAmount      int64
+	Rail                string
+	ExternalReferenceID string
+	IdempotencyKey      string
+}
+
 func AddBalance(
 	ctx context.Context,
 	db *sql.DB,
-	toAccountID, transferAmount int64,
-	rail, externalReferenceID, idempotencyKey string,
+	cmd AddBalanceCommand,
 ) (int64, error) {
-	if toAccountID <= 0 {
+	if cmd.ToAccountID <= 0 {
 		return 0, ErrToAccountIDRequired
 	}
-	if transferAmount <= 0 {
+	if cmd.TransferAmount <= 0 {
 		return 0, ErrTransferAmountRequired
 	}
-	if rail == "" {
+	if cmd.Rail == "" {
 		return 0, ErrRailValueRequired
 	}
-	if externalReferenceID == "" {
+	if cmd.ExternalReferenceID == "" {
 		return 0, ErrExternalReferenceIdRequired
 	}
-	if idempotencyKey == "" {
+	if cmd.IdempotencyKey == "" {
 		return 0, ErrIdempotencyKeyRequired
 	}
 
@@ -50,7 +57,7 @@ func AddBalance(
 	err := db.QueryRowContext(
 		ctx,
 		`select add_balance($1, $2, $3, $4, $5)`,
-		toAccountID, transferAmount, rail, externalReferenceID, idempotencyKey,
+		cmd.ToAccountID, cmd.TransferAmount, cmd.Rail, cmd.ExternalReferenceID, cmd.IdempotencyKey,
 	).Scan(&transactionID)
 
 	if err != nil && strings.Contains(err.Error(), dbErrAmountGreaterThanZero) {
@@ -68,6 +75,10 @@ func AddBalance(
 	if err != nil && strings.Contains(err.Error(), dbErrIdempotencyConflict) {
 		return 0, ErrIdempotencyConflict
 	}
+	// fallback to return unknown errors
+	if err != nil {
+		return 0, err
+	}
 
-	return transactionID, err
+	return transactionID, nil
 }

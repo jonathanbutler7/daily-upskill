@@ -108,8 +108,8 @@ The project should make a deliberate choice about what belongs in Go and what be
 The Go layer does not need to be a full production API, but it should be real enough to show how an application would use the ledger safely.
 
 - [ ] Define Go types for ledger commands, results, and application errors.
-- [ ] Expose a transfer command through a small HTTP API or CLI.
-- [ ] Expose a deposit or funding command through a small HTTP API or CLI.
+- [x] Expose a transfer command through a Go function.
+- [x] Expose a deposit or funding command through a Go function.
 - [x] Validate request shape before calling the database.
 - [x] Pass idempotency keys through from the caller to the posting path.
 - [x] Return the original transaction for a repeated idempotent request.

@@ -34,5 +34,6 @@ func AddBalance(
 		`select add_balance($1, $2, $3, $4, $5)`,
 		toAccountID, transferAmount, rail, externalReferenceID, idempotencyKey,
 	).Scan(&transactionID)
+	
 	return transactionID, err
 }

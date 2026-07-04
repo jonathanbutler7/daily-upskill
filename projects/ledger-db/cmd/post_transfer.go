@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -17,6 +16,11 @@ const (
 )
 
 var (
+	ErrFromAccountIDRequired  = errors.New("from account id is required")
+	ErrToAccountIDRequired    = errors.New("to account id is required")
+	ErrAmountGreaterThanZero  = errors.New("amount must be greater than 0")
+	ErrIdempotencyKeyRequired = errors.New("idempotency key is required")
+
 	ErrInsufficientFunds   = errors.New("insufficient funds")
 	ErrIdempotencyConflict = errors.New("idempotency conflict")
 	ErrFromAccountNotFound = errors.New("from account not found")
@@ -29,20 +33,20 @@ func PostTransfer(
 	db *sql.DB,
 	fromAccountID,
 	toAccountID,
-	amount int,
+	amount int64,
 	idempotencyKey string,
 ) (int64, error) {
 	if fromAccountID <= 0 {
-		return 0, fmt.Errorf("from account id is required")
+		return 0, ErrFromAccountIDRequired
 	}
 	if toAccountID <= 0 {
-		return 0, fmt.Errorf("to account id is required")
+		return 0, ErrToAccountIDRequired
 	}
 	if amount <= 0 {
-		return 0, fmt.Errorf("amount must be greater than 0")
+		return 0, ErrAmountGreaterThanZero
 	}
 	if idempotencyKey == "" {
-		return 0, fmt.Errorf("idempotency key is required")
+		return 0, ErrIdempotencyKeyRequired
 	}
 
 	var transactionID int64

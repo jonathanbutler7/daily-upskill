@@ -27,7 +27,7 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("post transfer id", tID)
-	tID, err = cmd.AddBalance(ctx, db, cmd.AddBalanceCommand{
+	tID, err = cmd.DepositFunds(ctx, db, cmd.DepositFundsCommand{
 		ToAccountID:         1,
 		TransferAmount:      100000,
 		Rail:                "ach",

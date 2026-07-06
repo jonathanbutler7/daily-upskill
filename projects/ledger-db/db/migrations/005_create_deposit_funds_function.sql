@@ -1,6 +1,6 @@
-drop function if exists add_balance(bigint, bigint, text, text, text);
+drop function if exists deposit_funds(bigint, bigint, text, text, text);
 
-create function add_balance(
+create function deposit_funds(
     to_account_id bigint,
     transfer_amount bigint,
     rail text,
@@ -26,7 +26,7 @@ begin
         raise exception 'external reference must not be empty';
     end if;
 
-    -- Validate the to_account_id exists and lock row.
+    -- Validate the to_account_id exists and lock row. DONE
     select currency_code
     into to_currency
     from ledger_accounts
@@ -37,7 +37,7 @@ begin
         raise exception 'to account not found';
     end if;
 
-    -- Locate the internal settlement account.
+    -- Locate the internal settlement account. DONE
     select id
     into funding_account_id
     from ledger_accounts
@@ -64,7 +64,7 @@ begin
         return existing_transaction_id;
     end if;
     
-    -- Check same idempotency conflict.
+    -- Check same idempotency conflict. DONE
     select id
     into existing_transaction_id
     from ledger_transactions lt
@@ -74,7 +74,7 @@ begin
         raise exception 'idempotency key reused with different request';
     end if;
 
-    -- Insert ledger transaction.
+    -- Insert ledger transaction. DONE
     insert into ledger_transactions (
         type,
         idempotency_key,

@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestAddBalanceRequestValidation(t *testing.T) {
+func TestDepositFundsRequestValidation(t *testing.T) {
 	ctx := t.Context()
 	tests := []struct {
 		name                string
@@ -64,10 +64,10 @@ func TestAddBalanceRequestValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := AddBalance(
+			_, err := DepositFunds(
 				ctx,
 				nil,
-				AddBalanceCommand{
+				DepositFundsCommand{
 					ToAccountID:         tt.toAccountID,
 					TransferAmount:      tt.amount,
 					Rail:                tt.rail,

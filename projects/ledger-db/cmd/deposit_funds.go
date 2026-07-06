@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+
+	"ledger-db/internal/ledgerstore"
 )
 
 var (
@@ -24,7 +26,7 @@ var (
 	ErrCashSettlementAccountNotFound = errors.New(dbErrCashSettlementAccountNotFound)
 )
 
-type AddBalanceCommand struct {
+type DepositFundsCommand struct {
 	ToAccountID         int64
 	TransferAmount      int64
 	Rail                string
@@ -32,10 +34,10 @@ type AddBalanceCommand struct {
 	IdempotencyKey      string
 }
 
-func AddBalance(
+func DepositFunds(
 	ctx context.Context,
 	db *sql.DB,
-	cmd AddBalanceCommand,
+	cmd DepositFundsCommand,
 ) (int64, error) {
 	if cmd.ToAccountID <= 0 {
 		return 0, ErrToAccountIDRequired
@@ -46,19 +48,23 @@ func AddBalance(
 	if cmd.Rail == "" {
 		return 0, ErrRailValueRequired
 	}
-	if cmd.ExternalReferenceID == "" {
+	if strings.TrimSpace(cmd.ExternalReferenceID) == "" {
 		return 0, ErrExternalReferenceIdRequired
 	}
 	if cmd.IdempotencyKey == "" {
 		return 0, ErrIdempotencyKeyRequired
 	}
 
-	var transactionID int64
-	err := db.QueryRowContext(
+	transactionID, err := ledgerstore.AddDeposit(
 		ctx,
-		`select add_balance($1, $2, $3, $4, $5)`,
-		cmd.ToAccountID, cmd.TransferAmount, cmd.Rail, cmd.ExternalReferenceID, cmd.IdempotencyKey,
-	).Scan(&transactionID)
+		db,
+		ledgerstore.AddDepositCommand{
+			ToAccountID:       ledgerstore.AccountID(cmd.ToAccountID),
+			TransferAmount:    ledgerstore.Amount(cmd.TransferAmount),
+			Rail:              ledgerstore.PaymentRail(cmd.Rail),
+			ExternalReference: ledgerstore.ExternalReference(cmd.ExternalReferenceID),
+			IdempotencyKey:    ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
+		})
 
 	if err != nil && strings.Contains(err.Error(), dbErrAmountGreaterThanZero) {
 		return 0, ErrAmountGreaterThanZero
@@ -72,7 +78,7 @@ func AddBalance(
 	if err != nil && strings.Contains(err.Error(), dbErrCashSettlementAccountNotFound) {
 		return 0, ErrCashSettlementAccountNotFound
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrIdempotencyConflict) {
+	if errors.Is(err, ledgerstore.ErrIdempotencyConflict) {
 		return 0, ErrIdempotencyConflict
 	}
 	// fallback to return unknown errors
@@ -80,5 +86,5 @@ func AddBalance(
 		return 0, err
 	}
 
-	return transactionID, nil
+	return int64(transactionID), nil
 }

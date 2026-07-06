@@ -1,3 +1,7 @@
+-- Deprecated: the Go path now uses cmd.DepositFunds -> ledgerstore.AddDeposit
+-- instead of calling this Postgres function directly. Keep this only as a
+-- reference while the migration is in progress.
+
 drop function if exists deposit_funds(bigint, bigint, text, text, text);
 
 create function deposit_funds(

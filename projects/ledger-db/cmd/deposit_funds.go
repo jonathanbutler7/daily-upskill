@@ -9,23 +9,6 @@ import (
 	"ledger-db/internal/ledgerstore"
 )
 
-var (
-	dbErrAmountGreaterThanZero         = "amount must be greater than 0"
-	dbErrExternalReferenceIdEmpty      = "external reference must not be empty"
-	dbErrCashSettlementAccountNotFound = "Cash Settlement account not found"
-)
-
-var (
-	// request validation errors
-	ErrTransferAmountRequired      = errors.New("transfer amount is required")
-	ErrRailValueRequired           = errors.New("rail value is required")
-	ErrExternalReferenceIdRequired = errors.New("externalReferenceID is required")
-
-	// db errors
-	ErrExternalReferenceIdEmpty      = errors.New(dbErrExternalReferenceIdEmpty)
-	ErrCashSettlementAccountNotFound = errors.New(dbErrCashSettlementAccountNotFound)
-)
-
 type DepositFundsCommand struct {
 	ToAccountID         int64
 	TransferAmount      int64
@@ -66,16 +49,16 @@ func DepositFunds(
 			IdempotencyKey:    ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
 		})
 
-	if err != nil && strings.Contains(err.Error(), dbErrAmountGreaterThanZero) {
+	if errors.Is(err, ledgerstore.ErrAmountGreaterThanZero) {
 		return 0, ErrAmountGreaterThanZero
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrExternalReferenceIdEmpty) {
+	if errors.Is(err, ledgerstore.ErrExternalReferenceRequired) {
 		return 0, ErrExternalReferenceIdEmpty
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrToAccountNotFound) {
+	if errors.Is(err, ledgerstore.ErrToAccountNotFound) {
 		return 0, ErrToAccountNotFound
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrCashSettlementAccountNotFound) {
+	if errors.Is(err, ledgerstore.ErrCashSettlementAccountNotFound) {
 		return 0, ErrCashSettlementAccountNotFound
 	}
 	if errors.Is(err, ledgerstore.ErrIdempotencyConflict) {

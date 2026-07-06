@@ -4,10 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-)
-
-var (
-	ErrIdempotencyConflict = errors.New("idempotency conflict")
+	"strings"
 )
 
 type AddDepositCommand struct {
@@ -19,6 +16,13 @@ type AddDepositCommand struct {
 }
 
 func AddDeposit(ctx context.Context, db *sql.DB, cmd AddDepositCommand) (TransactionID, error) {
+	if cmd.TransferAmount <= 0 {
+		return 0, ErrAmountGreaterThanZero
+	}
+	if strings.TrimSpace(string(cmd.ExternalReference)) == "" {
+		return 0, ErrExternalReferenceRequired
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err

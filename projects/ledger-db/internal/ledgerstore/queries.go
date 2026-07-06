@@ -8,22 +8,6 @@ import (
 
 // small deposit_funds SQL helper functions
 
-var (
-	ErrNoRowsFound       = errors.New("no rows found")
-	ErrToAccountNotFound = errors.New("to account not found")
-)
-
-// Named return types to help readability
-type AccountID int64
-type TransactionID int64
-type Amount int64
-type CurrencyCode string
-type IdempotencyKey string
-type PaymentRail string
-type ExternalReference string
-type ExternalTransferDirection string
-type ExternalTransferStatus string
-
 // Validate the to_account_id exists and lock row
 func lockToAccountCurrencyForUpdate(
 	ctx context.Context,
@@ -65,7 +49,7 @@ func lockCashSettlementAccountForUpdate(
 	var fundingAccountID int64
 	err := tx.QueryRowContext(ctx, q, currencyCode).Scan(&fundingAccountID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, ErrNoRowsFound
+		return 0, ErrCashSettlementAccountNotFound
 	}
 	if err != nil {
 		return 0, err

@@ -3,31 +3,7 @@ package ledger
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strings"
-)
-
-const (
-	dbErrInsufficientFunds   = "insufficient funds"
-	dbErrIdempotencyConflict = "idempotency key reused with different request"
-	dbErrFromAccountNotFound = "from account not found"
-	dbErrToAccountNotFound   = "to account not found"
-	dbErrCurrencyMismatch    = "currency mismatch"
-)
-
-var (
-	// request validation errors
-	ErrFromAccountIDRequired  = errors.New("from account id is required")
-	ErrToAccountIDRequired    = errors.New("to account id is required")
-	ErrAmountGreaterThanZero  = errors.New("amount must be greater than 0")
-	ErrIdempotencyKeyRequired = errors.New("idempotency key is required")
-
-	// db errors
-	ErrInsufficientFunds   = errors.New("insufficient funds")
-	ErrIdempotencyConflict = errors.New("idempotency conflict")
-	ErrFromAccountNotFound = errors.New("from account not found")
-	ErrToAccountNotFound   = errors.New("to account not found")
-	ErrCurrencyMismatch    = errors.New("currency mismatch")
 )
 
 type TransferCommand struct {

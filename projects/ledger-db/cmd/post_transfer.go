@@ -7,17 +7,11 @@ import (
 	"ledger-db/internal/ledgerstore"
 )
 
-type TransferCommand struct {
-	FromAccountID  int64
-	ToAccountID    int64
-	Amount         int64
-	IdempotencyKey string
-}
 
 func PostTransfer(
 	ctx context.Context,
 	db *sql.DB,
-	cmd TransferCommand,
+	cmd ledgerstore.TransferCommand,
 ) (int64, error) {
 	if cmd.FromAccountID <= 0 {
 		return 0, ledgerstore.ErrFromAccountIDRequired

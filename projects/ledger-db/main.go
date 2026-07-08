@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	cmd "ledger-db/cmd"
+	"ledger-db/internal/ledgerstore"
 	"log"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -17,7 +18,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	tID, err := cmd.PostTransfer(ctx, db, cmd.TransferCommand{
+	tID, err := cmd.PostTransfer(ctx, db, ledgerstore.TransferCommand{
 		FromAccountID:  2,
 		ToAccountID:    3,
 		Amount:         11111111,
@@ -27,7 +28,7 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("post transfer id", tID)
-	transactionID, err := cmd.DepositFunds(ctx, db, cmd.DepositFundsCommand{
+	transactionID, err := cmd.DepositFunds(ctx, db, ledgerstore.DepositFundsCommand{
 		ToAccountID:         1,
 		TransferAmount:      1000,
 		Rail:                "ach",

@@ -9,18 +9,12 @@ import (
 	"ledger-db/internal/ledgerstore"
 )
 
-type DepositFundsCommand struct {
-	ToAccountID         int64
-	TransferAmount      int64
-	Rail                string
-	ExternalReferenceID string
-	IdempotencyKey      string
-}
+
 
 func DepositFunds(
 	ctx context.Context,
 	db *sql.DB,
-	cmd DepositFundsCommand,
+	cmd ledgerstore.DepositFundsCommand,
 ) (ledgerstore.TransactionID, error) {
 	if cmd.ToAccountID <= 0 {
 		return 0, ledgerstore.ErrToAccountIDRequired

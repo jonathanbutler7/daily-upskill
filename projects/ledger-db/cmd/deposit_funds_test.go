@@ -68,7 +68,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			_, err := DepositFunds(
 				ctx,
 				nil,
-				DepositFundsCommand{
+				ledgerstore.DepositFundsCommand{
 					ToAccountID:         tt.toAccountID,
 					TransferAmount:      tt.amount,
 					Rail:                tt.rail,

@@ -10,3 +10,18 @@ type PaymentRail string
 type ExternalReference string
 type ExternalTransferDirection string
 type ExternalTransferStatus string
+
+type TransferCommand struct {
+	FromAccountID  int64
+	ToAccountID    int64
+	Amount         int64
+	IdempotencyKey string
+}
+
+type DepositFundsCommand struct {
+	ToAccountID         int64
+	TransferAmount      int64
+	Rail                string
+	ExternalReferenceID string
+	IdempotencyKey      string
+}

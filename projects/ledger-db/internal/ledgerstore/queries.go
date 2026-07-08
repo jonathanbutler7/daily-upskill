@@ -13,7 +13,7 @@ PostTransfer SQL helper functions
 *****************/
 
 // 000 Look up and lock the from account
-func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (int64, string, error) {
+func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (Amount, CurrencyCode, error) {
 	const q = `
 		select balance, currency_code
 		from ledger_accounts
@@ -25,16 +25,16 @@ func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (
 	var currencyCode string
 	err := tx.QueryRowContext(ctx, q, fromAccountID).Scan(&balance, &currencyCode)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, "", ErrNoRowsFound
+		return 0, "", ErrFromAccountNotFound
 	}
 	if err != nil {
 		return 0, "", err
 	}
-	return balance, currencyCode, nil
+	return Amount(balance), CurrencyCode(currencyCode), nil
 }
 
 // 001 Look up and lock the to account
-func lockToAccount(ctx context.Context, tx *sql.Tx, toAccountID AccountID) (string, error) {
+func lockToAccount(ctx context.Context, tx *sql.Tx, toAccountID AccountID) (CurrencyCode, error) {
 	const q = `
 		select currency_code
 		from ledger_accounts
@@ -44,12 +44,12 @@ func lockToAccount(ctx context.Context, tx *sql.Tx, toAccountID AccountID) (stri
 	var currencyCode string
 	err := tx.QueryRowContext(ctx, q, toAccountID).Scan(&currencyCode)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrNoRowsFound
+		return "", ErrToAccountNotFound
 	}
 	if err != nil {
 		return "", err
 	}
-	return currencyCode, nil
+	return CurrencyCode(currencyCode), nil
 }
 
 // 002 Check currencies match
@@ -61,7 +61,15 @@ func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 }
 
 // 003 If this exact request already posted, return its transaction id
-func checkIdempotencyRequest(ctx context.Context, tx *sql.Tx, idempotencyKey IdempotencyKey, fromAccountID, toAccountID AccountID, transferAmount Amount, fromCurrency CurrencyCode) (int64, error) {
+func checkIdempotencyRequest(
+	ctx context.Context,
+	tx *sql.Tx,
+	idempotencyKey IdempotencyKey,
+	fromAccountID AccountID,
+	toAccountID AccountID,
+	transferAmount Amount,
+	fromCurrency CurrencyCode,
+) (TransactionID, error) {
 	const q = `
 		select id
 		from ledger_transactions lt
@@ -71,39 +79,63 @@ func checkIdempotencyRequest(ctx context.Context, tx *sql.Tx, idempotencyKey Ide
 			and lt.amount = $4
 			and lt.currency_code = $5;
 	`
-	var existingTransactionId TransactionID
-	err := tx.QueryRowContext(ctx, q, idempotencyKey, fromAccountID, toAccountID, transferAmount, fromCurrency).Scan(&existingTransactionId)
+	var existingTransactionID int64
+	err := tx.QueryRowContext(
+		ctx,
+		q,
+		idempotencyKey,
+		fromAccountID,
+		toAccountID,
+		transferAmount,
+		fromCurrency,
+	).Scan(&existingTransactionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNoRowsFound
 	}
 	if err != nil {
 		return 0, err
 	}
-	return int64(existingTransactionId), nil
+	return TransactionID(existingTransactionID), nil
 }
 
 // 004 If the key exists for a different request, reject it
-func checkIdempotencyConflict2(ctx context.Context, tx *sql.Tx, idempotencyKey IdempotencyKey, fromAccountID, toAccountID AccountID, transferAmount Amount, fromCurrency CurrencyCode) (int64, error) {
+func checkIdempotencyConflict2(
+	ctx context.Context,
+	tx *sql.Tx,
+	idempotencyKey IdempotencyKey,
+	fromAccountID AccountID,
+	toAccountID AccountID,
+	transferAmount Amount,
+	fromCurrency CurrencyCode,
+) (TransactionID, error) {
 	const q = `
 		select id
 		from ledger_transactions lt
 		where lt.idempotency_key = $1
 			and not (
-				and lt.from_account_id = $2
+				lt.from_account_id = $2
 				and lt.to_account_id = $3
 				and lt.amount = $4
-				and lt.currency_code = $5;
+				and lt.currency_code = $5
 			);
 	`
-	var existingTransactionId TransactionID
-	err := tx.QueryRowContext(ctx, q, idempotencyKey, fromAccountID, toAccountID, transferAmount, fromCurrency).Scan(&existingTransactionId)
+	var transactionID int64
+	err := tx.QueryRowContext(
+		ctx,
+		q,
+		idempotencyKey,
+		fromAccountID,
+		toAccountID,
+		transferAmount,
+		fromCurrency,
+	).Scan(&transactionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNoRowsFound
 	}
 	if err != nil {
 		return 0, err
 	}
-	return int64(existingTransactionId), nil
+	return TransactionID(transactionID), nil
 }
 
 // pg sleep allows us to test concurrent transaction and make sure
@@ -113,91 +145,103 @@ func checkIdempotencyConflict2(ctx context.Context, tx *sql.Tx, idempotencyKey I
 // 005 Check balance
 func checkBalance(fromBalance, transferAmount Amount) error {
 	if fromBalance < transferAmount {
-		return ErrInsufficientFUnds
+		return ErrInsufficientFunds
 	}
 	return nil
 }
 
 // 006 Insert transaction
-func insertTransaction(ctx context.Context, tx *sql.Tx) (int64, error) {
+func insertTransaction(
+	ctx context.Context,
+	tx *sql.Tx,
+	idempotencyKey IdempotencyKey,
+	fromAccountID AccountID,
+	toAccountID AccountID,
+	transferAmount Amount,
+	fromCurrency CurrencyCode,
+) (TransactionID, error) {
 	const q = `
-		begin
-			insert into ledger_transactions (
-				type, 
-				idempotency_key, 
-				from_account_id, 
-				to_account_id, 
-				amount, 
-				currency_code
-			)
-			values (
-				'transfer',
-				idempotency_key, 
-				from_account_id,
-				to_account_id,
-				transfer_amount,
-				from_currency
-			)
-			returning id into new_transaction_id;
-			exception
-				when unique_violation then
-					select id
-					into existing_transaction_id
-					from ledger_transactions lt
-					where lt.idempotency_key = post_transfer.idempotency_key
-						and lt.from_account_id = post_transfer.from_account_id
-						and lt.to_account_id = post_transfer.to_account_id
-						and lt.amount = post_transfer.transfer_amount
-						and lt.currency_code = from_currency;
-
-					if existing_transaction_id is not null then
-						return existing_transaction_id;
-					end if;
-
-					select id
-					into existing_transaction_id
-					from ledger_transactions lt
-					where lt.idempotency_key = post_transfer.idempotency_key;
-
-					if existing_transaction_id is not null then
-						raise exception 'idempotency key reused with different request';
-					end if;
-
-					raise;
-		end;
+		insert into ledger_transactions (
+			type,
+			idempotency_key,
+			from_account_id,
+			to_account_id,
+			amount,
+			currency_code
+		)
+		values (
+			'transfer',
+			$1,
+			$2,
+			$3,
+			$4,
+			$5
+		)
+		on conflict (idempotency_key) do nothing
+		returning id;
 	`
 
-	var something string
-	err := tx.QueryRowContext(ctx, q, nil).Scan(&something)
+	var transactionID int64
+	err := tx.QueryRowContext(
+		ctx,
+		q,
+		idempotencyKey,
+		fromAccountID,
+		toAccountID,
+		transferAmount,
+		fromCurrency,
+	).Scan(&transactionID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, ErrNoRowsFound
+		existingTransactionID, lookupErr := checkIdempotencyRequest(
+			ctx,
+			tx,
+			idempotencyKey,
+			fromAccountID,
+			toAccountID,
+			transferAmount,
+			fromCurrency,
+		)
+		if lookupErr == nil {
+			return existingTransactionID, nil
+		}
+		if !errors.Is(lookupErr, ErrNoRowsFound) {
+			return 0, lookupErr
+		}
+		return 0, ErrIdempotencyConflict
 	}
 	if err != nil {
 		return 0, err
 	}
-	return 0, nil
+	return TransactionID(transactionID), nil
 }
 
 // 007 Insert entries
-func insertEntries(ctx context.Context, tx *sql.Tx) (int64, error) {
+func insertEntries(
+	ctx context.Context,
+	tx *sql.Tx,
+	transactionID TransactionID,
+	transferAmount Amount,
+	fromAccountID AccountID,
+	toAccountID AccountID,
+) error {
 	const q = `
 		insert into ledger_entries (transaction_id, account_id, amount)
 		values
-			(new_transaction_id, from_account_id, -transfer_amount),
-			(new_transaction_id, to_account_id, transfer_amount);
+			($1, $2, -$3),
+			($1, $4, $3);
 	`
-	var something string
-	err := tx.QueryRowContext(ctx, q, 3).Scan(&something)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, ErrNoRowsFound
-	}
-	if err != nil {
-		return 0, err
-	}
-	return 0, nil
+	_, err := tx.ExecContext(
+		ctx,
+		q,
+		transactionID,
+		fromAccountID,
+		transferAmount,
+		toAccountID,
+	)
+	return err
 }
 
-// 008 Insert entries
+// 008 Update balances
 func updateTransferBalances(
 	ctx context.Context,
 	tx *sql.Tx,

@@ -3,7 +3,8 @@ package ledger
 import (
 	"context"
 	"database/sql"
-	"strings"
+	"errors"
+	"ledger-db/internal/ledgerstore"
 )
 
 type TransferCommand struct {
@@ -31,25 +32,29 @@ func PostTransfer(
 		return 0, ErrIdempotencyKeyRequired
 	}
 
-	var transactionID int64
-	err := db.QueryRowContext(
+	transactionID, err := ledgerstore.PostTransfer(
 		ctx,
-		`select post_transfer($1, $2, $3, $4)`,
-		cmd.FromAccountID, cmd.ToAccountID, cmd.Amount, cmd.IdempotencyKey,
-	).Scan(&transactionID)
-	if err != nil && strings.Contains(err.Error(), dbErrInsufficientFunds) {
+		db,
+		ledgerstore.PostTransferCommand{
+			FromAccountID:  ledgerstore.AccountID(cmd.FromAccountID),
+			ToAccountID:    ledgerstore.AccountID(cmd.ToAccountID),
+			Amount:         ledgerstore.Amount(cmd.Amount),
+			IdempotencyKey: ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
+		},
+	)
+	if errors.Is(err, ErrInsufficientFunds) {
 		return 0, ErrInsufficientFunds
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrIdempotencyConflict) {
+	if errors.Is(err, ErrIdempotencyConflict) {
 		return 0, ErrIdempotencyConflict
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrFromAccountNotFound) {
+	if errors.Is(err, ErrFromAccountNotFound) {
 		return 0, ErrFromAccountNotFound
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrToAccountNotFound) {
+	if errors.Is(err, ErrToAccountNotFound) {
 		return 0, ErrToAccountNotFound
 	}
-	if err != nil && strings.Contains(err.Error(), dbErrCurrencyMismatch) {
+	if errors.Is(err, ErrCurrencyMismatch) {
 		return 0, ErrCurrencyMismatch
 	}
 	// fallback to return unknown errors
@@ -57,5 +62,5 @@ func PostTransfer(
 		return 0, err
 	}
 
-	return transactionID, nil
+	return int64(transactionID), nil
 }

@@ -6,7 +6,6 @@ const (
 	dbErrInsufficientFunds   = "insufficient funds"
 	dbErrIdempotencyConflict = "idempotency key reused with different request"
 	dbErrFromAccountNotFound = "from account not found"
-	dbErrToAccountNotFound   = "to account not found"
 	dbErrCurrencyMismatch    = "currency mismatch"
 )
 

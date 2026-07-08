@@ -20,7 +20,7 @@ func main() {
 	tID, err := cmd.PostTransfer(ctx, db, cmd.TransferCommand{
 		FromAccountID:  2,
 		ToAccountID:    3,
-		Amount:         1,
+		Amount:         11111111,
 		IdempotencyKey: "a-key-1123",
 	})
 	if err != nil {

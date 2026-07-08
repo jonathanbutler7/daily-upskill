@@ -20,7 +20,7 @@ func AddDeposit(ctx context.Context, db *sql.DB, cmd AddDepositCommand) (Transac
 		return 0, ErrAmountGreaterThanZero
 	}
 	if strings.TrimSpace(string(cmd.ExternalReference)) == "" {
-		return 0, ErrExternalReferenceRequired
+		return 0, ErrExternalReferenceIdRequired
 	}
 
 	tx, err := db.BeginTx(ctx, nil)

@@ -1,3 +1,7 @@
+-- Deprecated: the Go path now uses cmd.PostTransfer -> ledgerstore.PostTransfer
+-- instead of calling this Postgres function directly. Keep this only as a
+-- reference while the migration is in progress.
+
 drop function if exists post_transfer(bigint, bigint, bigint, text);
 
 create function post_transfer(

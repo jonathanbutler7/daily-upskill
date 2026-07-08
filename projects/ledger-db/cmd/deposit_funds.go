@@ -23,19 +23,19 @@ func DepositFunds(
 	cmd DepositFundsCommand,
 ) (ledgerstore.TransactionID, error) {
 	if cmd.ToAccountID <= 0 {
-		return 0, ErrToAccountIDRequired
+		return 0, ledgerstore.ErrToAccountIDRequired
 	}
 	if cmd.TransferAmount <= 0 {
-		return 0, ErrTransferAmountRequired
+		return 0, ledgerstore.ErrTransferAmountRequired
 	}
 	if cmd.Rail == "" {
-		return 0, ErrRailValueRequired
+		return 0, ledgerstore.ErrRailValueRequired
 	}
 	if strings.TrimSpace(cmd.ExternalReferenceID) == "" {
-		return 0, ErrExternalReferenceIdRequired
+		return 0, ledgerstore.ErrExternalReferenceIdRequired
 	}
 	if cmd.IdempotencyKey == "" {
-		return 0, ErrIdempotencyKeyRequired
+		return 0, ledgerstore.ErrIdempotencyKeyRequired
 	}
 
 	transactionID, err := ledgerstore.AddDeposit(
@@ -50,19 +50,19 @@ func DepositFunds(
 		})
 
 	if errors.Is(err, ledgerstore.ErrAmountGreaterThanZero) {
-		return 0, ErrAmountGreaterThanZero
+		return 0, ledgerstore.ErrAmountGreaterThanZero
 	}
-	if errors.Is(err, ledgerstore.ErrExternalReferenceRequired) {
-		return 0, ErrExternalReferenceIdEmpty
+	if errors.Is(err, ledgerstore.ErrExternalReferenceIdRequired) {
+		return 0, ledgerstore.ErrExternalReferenceIdEmpty
 	}
 	if errors.Is(err, ledgerstore.ErrToAccountNotFound) {
-		return 0, ErrToAccountNotFound
+		return 0, ledgerstore.ErrToAccountNotFound
 	}
 	if errors.Is(err, ledgerstore.ErrCashSettlementAccountNotFound) {
-		return 0, ErrCashSettlementAccountNotFound
+		return 0, ledgerstore.ErrCashSettlementAccountNotFound
 	}
 	if errors.Is(err, ledgerstore.ErrIdempotencyConflict) {
-		return 0, ErrIdempotencyConflict
+		return 0, ledgerstore.ErrIdempotencyConflict
 	}
 	// fallback to return unknown errors
 	if err != nil {

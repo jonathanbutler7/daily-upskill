@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"ledger-db/internal/ledgerstore"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func TestPostTransferRequestValidation(t *testing.T) {
 			toAccountID:    2,
 			amount:         100,
 			idempotencyKey: "string",
-			wantErr:        ErrFromAccountIDRequired,
+			wantErr:        ledgerstore.ErrFromAccountIDRequired,
 		},
 		{
 			name:           "to account id is required",
@@ -28,7 +29,7 @@ func TestPostTransferRequestValidation(t *testing.T) {
 			toAccountID:    0,
 			amount:         100,
 			idempotencyKey: "string",
-			wantErr:        ErrToAccountIDRequired,
+			wantErr:        ledgerstore.ErrToAccountIDRequired,
 		},
 		{
 			name:           "amount must be greater than zero",
@@ -36,7 +37,7 @@ func TestPostTransferRequestValidation(t *testing.T) {
 			toAccountID:    2,
 			amount:         0,
 			idempotencyKey: "string",
-			wantErr:        ErrAmountGreaterThanZero,
+			wantErr:        ledgerstore.ErrAmountGreaterThanZero,
 		},
 		{
 			name:           "idempotency key is required",
@@ -44,7 +45,7 @@ func TestPostTransferRequestValidation(t *testing.T) {
 			toAccountID:    2,
 			amount:         100,
 			idempotencyKey: "",
-			wantErr:        ErrIdempotencyKeyRequired,
+			wantErr:        ledgerstore.ErrIdempotencyKeyRequired,
 		},
 	}
 

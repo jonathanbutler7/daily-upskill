@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"ledger-db/internal/ledgerstore"
 	"testing"
 )
 
@@ -22,7 +23,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "string",
 			idempotencyKey:      "string",
-			wantErr:             ErrToAccountIDRequired,
+			wantErr:             ledgerstore.ErrToAccountIDRequired,
 		},
 		{
 			name:                "transfer amount is required",
@@ -31,7 +32,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "string",
 			idempotencyKey:      "string",
-			wantErr:             ErrTransferAmountRequired,
+			wantErr:             ledgerstore.ErrTransferAmountRequired,
 		},
 		{
 			name:                "rail value is required",
@@ -40,7 +41,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "",
 			externalReferenceID: "string",
 			idempotencyKey:      "string",
-			wantErr:             ErrRailValueRequired,
+			wantErr:             ledgerstore.ErrRailValueRequired,
 		},
 		{
 			name:                "external reference id is required",
@@ -49,7 +50,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "",
 			idempotencyKey:      "string",
-			wantErr:             ErrExternalReferenceIdRequired,
+			wantErr:             ledgerstore.ErrExternalReferenceIdRequired,
 		},
 		{
 			name:                "idempotency key is required",
@@ -58,7 +59,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "string",
 			idempotencyKey:      "",
-			wantErr:             ErrIdempotencyKeyRequired,
+			wantErr:             ledgerstore.ErrIdempotencyKeyRequired,
 		},
 	}
 

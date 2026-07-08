@@ -20,16 +20,16 @@ func PostTransfer(
 	cmd TransferCommand,
 ) (int64, error) {
 	if cmd.FromAccountID <= 0 {
-		return 0, ErrFromAccountIDRequired
+		return 0, ledgerstore.ErrFromAccountIDRequired
 	}
 	if cmd.ToAccountID <= 0 {
-		return 0, ErrToAccountIDRequired
+		return 0, ledgerstore.ErrToAccountIDRequired
 	}
 	if cmd.Amount <= 0 {
-		return 0, ErrAmountGreaterThanZero
+		return 0, ledgerstore.ErrAmountGreaterThanZero
 	}
 	if cmd.IdempotencyKey == "" {
-		return 0, ErrIdempotencyKeyRequired
+		return 0, ledgerstore.ErrIdempotencyKeyRequired
 	}
 
 	transactionID, err := ledgerstore.PostTransfer(
@@ -42,20 +42,20 @@ func PostTransfer(
 			IdempotencyKey: ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
 		},
 	)
-	if errors.Is(err, ErrInsufficientFunds) {
-		return 0, ErrInsufficientFunds
+	if errors.Is(err, ledgerstore.ErrInsufficientFunds) {
+		return 0, ledgerstore.ErrInsufficientFunds
 	}
-	if errors.Is(err, ErrIdempotencyConflict) {
-		return 0, ErrIdempotencyConflict
+	if errors.Is(err, ledgerstore.ErrIdempotencyConflict) {
+		return 0, ledgerstore.ErrIdempotencyConflict
 	}
-	if errors.Is(err, ErrFromAccountNotFound) {
-		return 0, ErrFromAccountNotFound
+	if errors.Is(err, ledgerstore.ErrFromAccountNotFound) {
+		return 0, ledgerstore.ErrFromAccountNotFound
 	}
-	if errors.Is(err, ErrToAccountNotFound) {
-		return 0, ErrToAccountNotFound
+	if errors.Is(err, ledgerstore.ErrToAccountNotFound) {
+		return 0, ledgerstore.ErrToAccountNotFound
 	}
-	if errors.Is(err, ErrCurrencyMismatch) {
-		return 0, ErrCurrencyMismatch
+	if errors.Is(err, ledgerstore.ErrCurrencyMismatch) {
+		return 0, ledgerstore.ErrCurrencyMismatch
 	}
 	// fallback to return unknown errors
 	if err != nil {

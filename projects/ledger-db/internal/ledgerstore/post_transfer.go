@@ -91,6 +91,11 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
+	err = verifyTransactionBalances(ctx, tx, transactionID)
+	if err != nil {
+		return 0, err
+	}
+
 	if err := updateTransferBalances(ctx, tx, cmd.Amount, cmd.FromAccountID, cmd.ToAccountID); err != nil {
 		return 0, err
 	}

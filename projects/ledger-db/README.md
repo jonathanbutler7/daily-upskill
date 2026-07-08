@@ -80,6 +80,27 @@ What this has proved so far:
 - Reusing the same idempotency key with the same request returns the original transaction.
 - Reusing the same idempotency key with a different request fails.
 
+## Run Go tests
+
+Run the normal test suite from this directory:
+
+```bash
+GOCACHE=/private/tmp/ledger-db-go-build-cache go test ./...
+```
+
+The SQL scenarios also have Go integration-test versions. They reset the local
+ledger tables, so run them only against a throwaway local database:
+
+```bash
+LEDGER_DB_INTEGRATION=1 GOCACHE=/private/tmp/ledger-db-go-build-cache go test ./cmd
+```
+
+Set `LEDGER_DB_DSN` if you want to use a database other than:
+
+```text
+postgresql://ledger_db:password@localhost:5432/ledger_db
+```
+
 ## Boundaries
 
 - Postgres owns 

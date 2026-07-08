@@ -77,6 +77,10 @@ func AddDeposit(ctx context.Context, db *sql.DB, cmd AddDepositCommand) (Transac
 	if err := insertLedgerEntries(ctx, tx, transactionID, cmd.TransferAmount, fundingAccountID, cmd.ToAccountID); err != nil {
 		return 0, err
 	}
+	err = verifyTransactionBalances(ctx, tx, transactionID)
+	if err != nil {
+		return 0, err
+	}
 
 	if err := updateBalances(ctx, tx, cmd.TransferAmount, fundingAccountID, cmd.ToAccountID); err != nil {
 		return 0, err

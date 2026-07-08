@@ -18,4 +18,5 @@ var (
 	ErrToAccountIDRequired           = errors.New("to account id is required")
 	ErrToAccountNotFound             = errors.New("to account not found")
 	ErrTransferAmountRequired        = errors.New("transfer amount is required")
+	ErrTransactionNotBalanced        = errors.New("transaction is not balanced")
 )

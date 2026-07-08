@@ -9,8 +9,6 @@ import (
 	"ledger-db/internal/ledgerstore"
 )
 
-
-
 func DepositFunds(
 	ctx context.Context,
 	db *sql.DB,

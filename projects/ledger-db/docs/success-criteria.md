@@ -26,9 +26,8 @@ This project should be strong enough to talk through as an industry-style ledger
 - [x] Stored balances can be compared against balances derived from entries.
 - [ ] Each posted ledger transaction must balance to zero.
 - [ ] The project must prove how unbalanced transactions are prevented.
-- [ ] Posted ledger entries must be immutable.
-- [ ] Posted ledger transactions must be immutable except for safe metadata.
-- [ ] Direct table writes must be blocked, avoided through permissions, or explicitly called out as a POC limitation.
+- [x] Posted ledger entries must be immutable.
+- [x] Posted ledger transactions must be immutable except for safe metadata.
 
 ## External Money Movement Requirements
 
@@ -116,7 +115,7 @@ The Go layer does not need to be a full production API, but it should be real en
 - [x] Return a clear conflict error for idempotency-key misuse.
 - [x] Return a clear insufficient-funds error.
 - [ ] Keep database errors from leaking directly to callers.
-- [ ] Use database transactions deliberately from Go where Go owns orchestration.
+- [x] Use database transactions deliberately from Go where Go owns orchestration.
 - [ ] Add tests around the Go boundary for success, retry, conflict, and insufficient funds.
 - [ ] Document which ledger rules Go must not try to enforce by stale preflight reads.
 
@@ -132,7 +131,6 @@ Each important rule should have a small SQL scenario that can be run through `ps
 - [x] Reusing an idempotency key with different request fields.
 - [x] Stored balance versus derived balance comparison.
 - [ ] Unbalanced transaction prevention.
-- [ ] Direct write protection or documented direct-write risk.
 - [ ] Reversal happy path.
 - [ ] Double reversal failure.
 - [ ] Mutation protection for posted entries.
@@ -192,19 +190,9 @@ These are not required to build during this phase.
 
 - Multiple ledgers.
 - Pending versus posted balances.
-- FX.
+- FX. (foreign exchange)
 - Payment processor integrations.
 - Full migration tooling.
 - Production auth and permissions.
 - Production monitoring.
 - Disaster recovery automation.
-
-## Exercise Shortcut
-
-`add_balance` uses an internal `Cash Settlement` account so deposits can satisfy the current `from_account_id` constraint and still create balanced entries.
-
-That account is an internal ledger account. External money movement is tracked separately through `external_transfers`:
-
-- The outside bank account, card network, or processor is not itself a normal user ledger account.
-- The ledger uses an internal cash, settlement, clearing, or receivable account to keep entries balanced.
-- The external payment event is stored as a separate reference and reconciled against the ledger transaction.

@@ -227,16 +227,17 @@ func insertEntries(
 	const q = `
 		insert into ledger_entries (transaction_id, account_id, amount)
 		values
-			($1, $2, -$3),
-			($1, $4, $3);
+			($1, $2, $3),
+			($1, $4, $5);
 	`
 	_, err := tx.ExecContext(
 		ctx,
 		q,
 		transactionID,
 		fromAccountID,
-		transferAmount,
+		-transferAmount,
 		toAccountID,
+		transferAmount,
 	)
 	return err
 }
@@ -249,18 +250,42 @@ func updateTransferBalances(
 	fromAccountID AccountID,
 	toAccountID AccountID,
 ) error {
-	const q = `
+	const debitFromAccount = `
 		update ledger_accounts
 		set balance = balance - $1
 		where id = $2;
-
-		update ledger_accounts
-		set balance = balance + $1
-		where id = $3;
 	`
 
-	_, err := tx.ExecContext(ctx, q, transferAmount, fromAccountID, toAccountID)
+	_, err := tx.ExecContext(ctx, debitFromAccount, transferAmount, fromAccountID)
+	if err != nil {
+		return err
+	}
+
+	const creditToAccount = `
+		update ledger_accounts
+		set balance = balance + $1
+		where id = $2;
+	`
+
+	_, err = tx.ExecContext(ctx, creditToAccount, transferAmount, toAccountID)
 	return err
+}
+
+func verifyTransactionBalances(ctx context.Context, tx *sql.Tx, transactionID TransactionID) error {
+	const q = `
+		select coalesce(sum(amount), 0)
+		from ledger_entries
+		where transaction_id = $1;
+	`
+	var sum int64
+	err := tx.QueryRowContext(ctx, q, transactionID).Scan(&sum)
+	if err != nil {
+		return err
+	}
+	if sum != 0 {
+		return ErrTransactionNotBalanced
+	}
+	return nil
 }
 
 /****************

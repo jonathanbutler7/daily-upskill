@@ -21,7 +21,7 @@ func DepositFunds(
 	ctx context.Context,
 	db *sql.DB,
 	cmd DepositFundsCommand,
-) (int64, error) {
+) (ledgerstore.TransactionID, error) {
 	if cmd.ToAccountID <= 0 {
 		return 0, ErrToAccountIDRequired
 	}
@@ -69,5 +69,5 @@ func DepositFunds(
 		return 0, err
 	}
 
-	return int64(transactionID), nil
+	return ledgerstore.TransactionID(transactionID), nil
 }

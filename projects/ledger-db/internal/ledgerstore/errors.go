@@ -9,4 +9,6 @@ var (
 	ErrToAccountNotFound             = errors.New("to account not found")
 	ErrCashSettlementAccountNotFound = errors.New("Cash Settlement account not found")
 	ErrIdempotencyConflict           = errors.New("idempotency conflict")
+	ErrCurrencyMismatch              = errors.New("currency mismatch")
+	ErrInsufficientFUnds             = errors.New("insufficient funds")
 )

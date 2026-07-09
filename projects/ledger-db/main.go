@@ -18,7 +18,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	
+
 	tID, err := cmd.PostTransfer(ctx, db,
 		ledgerstore.TransferCommand{
 			FromAccountID:  2,
@@ -30,14 +30,14 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("post transfer id", tID)
-	
-	transactionID, err := cmd.DepositFunds(ctx, db,
-		ledgerstore.DepositFundsCommand{
-			ToAccountID:         1,
-			TransferAmount:      1000,
-			Rail:                "ach",
-			ExternalReferenceID: "external-id",
-			IdempotencyKey:      "a-key-113",
+
+	transactionID, err := cmd.PostExternalTransfer(ctx, db,
+		ledgerstore.PostExternalTransferCommand{
+			ToAccountID:       1,
+			TransferAmount:    1000,
+			Rail:              "ach",
+			ExternalReference: "external-id",
+			IdempotencyKey:    "a-key-113",
 		})
 	if err != nil {
 		log.Fatal(err)

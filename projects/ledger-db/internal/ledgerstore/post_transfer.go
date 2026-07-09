@@ -6,13 +6,6 @@ import (
 	"errors"
 )
 
-type PostTransferCommand struct {
-	FromAccountID  AccountID
-	ToAccountID    AccountID
-	Amount         Amount
-	IdempotencyKey IdempotencyKey
-}
-
 func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (TransactionID, error) {
 	if cmd.Amount <= 0 {
 		return 0, ErrAmountGreaterThanZero

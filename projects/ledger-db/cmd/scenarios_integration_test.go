@@ -18,8 +18,8 @@ const defaultTestDSN = "postgresql://ledger_db:password@localhost:5432/ledger_db
 
 type scenarioAccounts struct {
 	cashSettlement int64
-	alice          int64
-	bob            int64
+	alice          ledgerstore.AccountID
+	bob            ledgerstore.AccountID
 }
 
 func openIntegrationDB(t *testing.T) (context.Context, *sql.DB) {
@@ -155,12 +155,12 @@ func TestScenarioAliceSendsBob(t *testing.T) {
 	resetScenarioDB(t, ctx, db)
 	accounts := seedAliceAndBob(t, ctx, db)
 
-	depositID, err := DepositFunds(ctx, db, ledgerstore.DepositFundsCommand{
-		ToAccountID:         accounts.alice,
-		TransferAmount:      2000,
-		Rail:                "ach",
-		ExternalReferenceID: "seed-alice-2000-ext",
-		IdempotencyKey:      "seed-alice-2000",
+	depositID, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		ToAccountID:       accounts.alice,
+		TransferAmount:    2000,
+		Rail:              "ach",
+		ExternalReference: "seed-alice-2000-ext",
+		IdempotencyKey:    "seed-alice-2000",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -196,11 +196,11 @@ func TestScenarioIdempotency(t *testing.T) {
 	resetScenarioDB(t, ctx, db)
 	accounts := seedAliceAndBob(t, ctx, db)
 
-	_, err := DepositFunds(ctx, db, ledgerstore.DepositFundsCommand{
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
 		ToAccountID:         accounts.alice,
 		TransferAmount:      2000,
 		Rail:                "ach",
-		ExternalReferenceID: "alice-idempotency-seed-ext",
+		ExternalReference: "alice-idempotency-seed-ext",
 		IdempotencyKey:      "alice-idempotency-seed",
 	})
 	if err != nil {
@@ -244,11 +244,11 @@ func TestScenarioInsufficientFunds(t *testing.T) {
 	resetScenarioDB(t, ctx, db)
 	accounts := seedAliceAndBob(t, ctx, db)
 
-	_, err := DepositFunds(ctx, db, ledgerstore.DepositFundsCommand{
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
 		ToAccountID:         accounts.alice,
 		TransferAmount:      2000,
 		Rail:                "ach",
-		ExternalReferenceID: "alice-insufficient-seed-ext",
+		ExternalReference: "alice-insufficient-seed-ext",
 		IdempotencyKey:      "alice-insufficient-seed",
 	})
 	if err != nil {
@@ -279,11 +279,11 @@ func TestScenarioMismatchedIdempotencyKey(t *testing.T) {
 	resetScenarioDB(t, ctx, db)
 	accounts := seedAliceAndBob(t, ctx, db)
 
-	_, err := DepositFunds(ctx, db, ledgerstore.DepositFundsCommand{
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
 		ToAccountID:         accounts.alice,
 		TransferAmount:      5000,
 		Rail:                "ach",
-		ExternalReferenceID: "alice-mismatch-seed-ext",
+		ExternalReference: "alice-mismatch-seed-ext",
 		IdempotencyKey:      "alice-mismatch-seed",
 	})
 	if err != nil {
@@ -324,11 +324,11 @@ func TestScenarioStoredAndDerivedBalances(t *testing.T) {
 	resetScenarioDB(t, ctx, db)
 	accounts := seedAliceAndBob(t, ctx, db)
 
-	_, err := DepositFunds(ctx, db, ledgerstore.DepositFundsCommand{
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
 		ToAccountID:         accounts.alice,
 		TransferAmount:      2000,
 		Rail:                "ach",
-		ExternalReferenceID: "alice-balance-check-seed-ext",
+		ExternalReference: "alice-balance-check-seed-ext",
 		IdempotencyKey:      "alice-balance-check-seed",
 	})
 	if err != nil {

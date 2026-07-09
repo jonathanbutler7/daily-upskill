@@ -7,20 +7,12 @@ import (
 	"strings"
 )
 
-type AddDepositCommand struct {
-	ToAccountID       AccountID
-	TransferAmount    Amount
-	Rail              PaymentRail
-	ExternalReference ExternalReference
-	IdempotencyKey    IdempotencyKey
-}
-
-func AddDeposit(ctx context.Context, db *sql.DB, cmd AddDepositCommand) (TransactionID, error) {
+func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTransferCommand) (TransactionID, error) {
 	if cmd.TransferAmount <= 0 {
 		return 0, ErrAmountGreaterThanZero
 	}
 	if strings.TrimSpace(string(cmd.ExternalReference)) == "" {
-		return 0, ErrExternalReferenceIdRequired
+		return 0, ErrExternalReferenceRequired
 	}
 
 	tx, err := db.BeginTx(ctx, nil)

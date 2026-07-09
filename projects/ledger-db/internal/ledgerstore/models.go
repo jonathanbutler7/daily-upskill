@@ -12,16 +12,23 @@ type ExternalTransferDirection string
 type ExternalTransferStatus string
 
 type TransferCommand struct {
-	FromAccountID  int64
-	ToAccountID    int64
-	Amount         int64
+	FromAccountID  AccountID
+	ToAccountID    AccountID
+	Amount         Amount
 	IdempotencyKey string
 }
 
-type DepositFundsCommand struct {
-	ToAccountID         int64
-	TransferAmount      int64
-	Rail                string
-	ExternalReferenceID string
-	IdempotencyKey      string
+type PostTransferCommand struct {
+	FromAccountID  AccountID
+	ToAccountID    AccountID
+	Amount         Amount
+	IdempotencyKey IdempotencyKey
+}
+
+type PostExternalTransferCommand struct {
+	ToAccountID       AccountID
+	TransferAmount    Amount
+	Rail              PaymentRail
+	ExternalReference ExternalReference
+	IdempotencyKey    IdempotencyKey
 }

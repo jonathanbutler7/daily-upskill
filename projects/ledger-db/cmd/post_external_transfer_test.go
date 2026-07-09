@@ -50,7 +50,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "",
 			idempotencyKey:      "string",
-			wantErr:             ledgerstore.ErrExternalReferenceIdRequired,
+			wantErr:             ledgerstore.ErrExternalReferenceRequired,
 		},
 		{
 			name:                "idempotency key is required",
@@ -65,15 +65,15 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := DepositFunds(
+			_, err := PostExternalTransfer(
 				ctx,
 				nil,
-				ledgerstore.DepositFundsCommand{
-					ToAccountID:         tt.toAccountID,
-					TransferAmount:      tt.amount,
-					Rail:                tt.rail,
-					ExternalReferenceID: tt.externalReferenceID,
-					IdempotencyKey:      tt.idempotencyKey,
+				ledgerstore.PostExternalTransferCommand{
+					ToAccountID:       ledgerstore.AccountID(tt.toAccountID),
+					TransferAmount:    ledgerstore.Amount(tt.amount),
+					Rail:              ledgerstore.PaymentRail(tt.rail),
+					ExternalReference: ledgerstore.ExternalReference(tt.externalReferenceID),
+					IdempotencyKey:    ledgerstore.IdempotencyKey(tt.idempotencyKey),
 				},
 			)
 			if err == nil {

@@ -9,10 +9,10 @@ import (
 	"ledger-db/internal/ledgerstore"
 )
 
-func DepositFunds(
+func PostExternalTransfer(
 	ctx context.Context,
 	db *sql.DB,
-	cmd ledgerstore.DepositFundsCommand,
+	cmd ledgerstore.PostExternalTransferCommand,
 ) (ledgerstore.TransactionID, error) {
 	if cmd.ToAccountID <= 0 {
 		return 0, ledgerstore.ErrToAccountIDRequired
@@ -23,29 +23,29 @@ func DepositFunds(
 	if cmd.Rail == "" {
 		return 0, ledgerstore.ErrRailValueRequired
 	}
-	if strings.TrimSpace(cmd.ExternalReferenceID) == "" {
-		return 0, ledgerstore.ErrExternalReferenceIdRequired
+	if strings.TrimSpace(string(cmd.ExternalReference)) == "" {
+		return 0, ledgerstore.ErrExternalReferenceRequired
 	}
 	if cmd.IdempotencyKey == "" {
 		return 0, ledgerstore.ErrIdempotencyKeyRequired
 	}
 
-	transactionID, err := ledgerstore.AddDeposit(
+	transactionID, err := ledgerstore.PostExternalTransfer(
 		ctx,
 		db,
-		ledgerstore.AddDepositCommand{
+		ledgerstore.PostExternalTransferCommand{
 			ToAccountID:       ledgerstore.AccountID(cmd.ToAccountID),
 			TransferAmount:    ledgerstore.Amount(cmd.TransferAmount),
 			Rail:              ledgerstore.PaymentRail(cmd.Rail),
-			ExternalReference: ledgerstore.ExternalReference(cmd.ExternalReferenceID),
+			ExternalReference: ledgerstore.ExternalReference(cmd.ExternalReference),
 			IdempotencyKey:    ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
 		})
 
 	if errors.Is(err, ledgerstore.ErrAmountGreaterThanZero) {
 		return 0, ledgerstore.ErrAmountGreaterThanZero
 	}
-	if errors.Is(err, ledgerstore.ErrExternalReferenceIdRequired) {
-		return 0, ledgerstore.ErrExternalReferenceIdEmpty
+	if errors.Is(err, ledgerstore.ErrExternalReferenceRequired) {
+		return 0, ledgerstore.ErrExternalReferenceEmpty
 	}
 	if errors.Is(err, ledgerstore.ErrToAccountNotFound) {
 		return 0, ledgerstore.ErrToAccountNotFound

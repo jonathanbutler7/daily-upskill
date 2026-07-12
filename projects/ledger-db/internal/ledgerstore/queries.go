@@ -42,9 +42,10 @@ func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 }
 
 // 3 If this exact request already posted, return its transaction id
-func checkIdempotencyRequest(
+func findSameLedgerTransaction(
 	ctx context.Context,
 	tx *sql.Tx,
+	transactionType string,
 	idempotencyKey IdempotencyKey,
 	fromAccountID AccountID,
 	toAccountID AccountID,
@@ -55,16 +56,18 @@ func checkIdempotencyRequest(
 		select id
 		from ledger_transactions lt
 		where lt.idempotency_key = $1
-			and lt.from_account_id = $2
-			and lt.to_account_id = $3
-			and lt.amount = $4
-			and lt.currency_code = $5;
+			and lt.type = $2
+			and lt.from_account_id = $3
+			and lt.to_account_id = $4
+			and lt.amount = $5
+			and lt.currency_code = $6;
 	`
 	var existingTransactionID int64
 	err := tx.QueryRowContext(
 		ctx,
 		q,
 		idempotencyKey,
+		transactionType,
 		fromAccountID,
 		toAccountID,
 		transferAmount,
@@ -79,36 +82,22 @@ func checkIdempotencyRequest(
 	return TransactionID(existingTransactionID), nil
 }
 
-// 4 If the key exists for a different request, reject it
-func checkIdempotencyConflict2(
+// 4 If the key exists for any request, return its transaction id
+func findLedgerTransactionByIdempotencyKey(
 	ctx context.Context,
 	tx *sql.Tx,
 	idempotencyKey IdempotencyKey,
-	fromAccountID AccountID,
-	toAccountID AccountID,
-	transferAmount Amount,
-	fromCurrency CurrencyCode,
 ) (TransactionID, error) {
 	const q = `
 		select id
 		from ledger_transactions lt
-		where lt.idempotency_key = $1
-			and not (
-				lt.from_account_id = $2
-				and lt.to_account_id = $3
-				and lt.amount = $4
-				and lt.currency_code = $5
-			);
+		where lt.idempotency_key = $1;
 	`
 	var transactionID int64
 	err := tx.QueryRowContext(
 		ctx,
 		q,
 		idempotencyKey,
-		fromAccountID,
-		toAccountID,
-		transferAmount,
-		fromCurrency,
 	).Scan(&transactionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNoRowsFound
@@ -132,9 +121,10 @@ func checkBalance(fromBalance, transferAmount Amount) error {
 }
 
 // 6 Insert transaction
-func insertTransaction(
+func insertLedgerTransaction(
 	ctx context.Context,
 	tx *sql.Tx,
+	transactionType string,
 	idempotencyKey IdempotencyKey,
 	fromAccountID AccountID,
 	toAccountID AccountID,
@@ -151,12 +141,12 @@ func insertTransaction(
 			currency_code
 		)
 		values (
-			'transfer',
 			$1,
 			$2,
 			$3,
 			$4,
-			$5
+			$5,
+			$6
 		)
 		on conflict (idempotency_key) do nothing
 		returning id;
@@ -166,6 +156,7 @@ func insertTransaction(
 	err := tx.QueryRowContext(
 		ctx,
 		q,
+		transactionType,
 		idempotencyKey,
 		fromAccountID,
 		toAccountID,
@@ -173,22 +164,7 @@ func insertTransaction(
 		fromCurrency,
 	).Scan(&transactionID)
 	if errors.Is(err, sql.ErrNoRows) {
-		existingTransactionID, lookupErr := checkIdempotencyRequest(
-			ctx,
-			tx,
-			idempotencyKey,
-			fromAccountID,
-			toAccountID,
-			transferAmount,
-			fromCurrency,
-		)
-		if lookupErr == nil {
-			return existingTransactionID, nil
-		}
-		if !errors.Is(lookupErr, ErrNoRowsFound) {
-			return 0, lookupErr
-		}
-		return 0, ErrIdempotencyConflict
+		return 0, ErrNoRowsFound
 	}
 	if err != nil {
 		return 0, err
@@ -196,32 +172,20 @@ func insertTransaction(
 	return TransactionID(transactionID), nil
 }
 
-// 8 Update balances
-func updateTransferBalances(
+// 8 Update account balance
+func adjustAccountBalance(
 	ctx context.Context,
 	tx *sql.Tx,
-	transferAmount Amount,
-	fromAccountID AccountID,
-	toAccountID AccountID,
+	accountID AccountID,
+	amountDelta Amount,
 ) error {
-	const debitFromAccount = `
-		update ledger_accounts
-		set balance = balance - $1
-		where id = $2;
-	`
-
-	_, err := tx.ExecContext(ctx, debitFromAccount, transferAmount, fromAccountID)
-	if err != nil {
-		return err
-	}
-
-	const creditToAccount = `
+	const q = `
 		update ledger_accounts
 		set balance = balance + $1
 		where id = $2;
 	`
 
-	_, err = tx.ExecContext(ctx, creditToAccount, transferAmount, toAccountID)
+	_, err := tx.ExecContext(ctx, q, amountDelta, accountID)
 	return err
 }
 
@@ -298,120 +262,6 @@ func lockCashSettlementAccountForUpdate(
 	return AccountID(fundingAccountID), nil
 }
 
-// Check same idempotency request
-// caller should treat rows not found as a chance to keep going, the request is valid
-func checkSameIdempotencyRequest(
-	ctx context.Context,
-	tx *sql.Tx,
-	idempotencyKey IdempotencyKey,
-	fundingAccountID AccountID,
-	toAccountID AccountID,
-	transferAmount Amount,
-	toCurrency CurrencyCode,
-) (TransactionID, error) {
-	const q = `
-		select id
-		from ledger_transactions lt
-		where lt.idempotency_key = $1
-			and lt.type = 'deposit'
-			and lt.from_account_id = $2
-			and lt.to_account_id = $3
-			and lt.amount = $4
-			and lt.currency_code = $5;
-	`
-
-	var transactionID int64
-	err := tx.QueryRowContext(
-		ctx,
-		q,
-		idempotencyKey,
-		fundingAccountID,
-		toAccountID,
-		transferAmount,
-		toCurrency,
-	).Scan(&transactionID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, ErrNoRowsFound
-	}
-	if err != nil {
-		return 0, err
-	}
-	return TransactionID(transactionID), nil
-}
-
-// Check same idempotency conflict
-// caller should treat rows not found as a chance to keep going, the request is valid
-func checkIdempotencyConflict(
-	ctx context.Context,
-	tx *sql.Tx,
-	idempotencyKey IdempotencyKey,
-) (TransactionID, error) {
-	const q = `
-		select id
-		from ledger_transactions lt
-		where lt.idempotency_key = $1;
-	`
-	var transactionID int64
-	err := tx.QueryRowContext(
-		ctx,
-		q,
-		idempotencyKey,
-	).Scan(&transactionID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, ErrNoRowsFound
-	}
-	if err != nil {
-		return 0, err
-	}
-	return TransactionID(transactionID), nil
-}
-
-// Insert ledger transaction
-func insertLedgerTransaction(
-	ctx context.Context,
-	tx *sql.Tx,
-	idempotencyKey IdempotencyKey,
-	fundingAccountID AccountID,
-	toAccountID AccountID,
-	transferAmount Amount,
-	toCurrency CurrencyCode,
-) (TransactionID, error) {
-	const q = `
-		insert into ledger_transactions (
-			type,
-			idempotency_key,
-			from_account_id,
-			to_account_id,
-			amount,
-			currency_code
-		)
-		values (
-			'deposit',
-			$1,
-			$2,
-			$3,
-			$4,
-			$5
-		)
-		returning id
-	`
-	var transactionID int64
-
-	err := tx.QueryRowContext(
-		ctx,
-		q,
-		idempotencyKey,
-		fundingAccountID,
-		toAccountID,
-		transferAmount,
-		toCurrency,
-	).Scan(&transactionID)
-	if err != nil {
-		return 0, err
-	}
-	return TransactionID(transactionID), nil
-}
-
 // Insert ledger entries
 func insertLedgerEntries(
 	ctx context.Context,
@@ -436,48 +286,6 @@ func insertLedgerEntries(
 		transactionID,
 		toAccountID,
 		transferAmount,
-	)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// Update balances
-func updateBalances(
-	ctx context.Context,
-	tx *sql.Tx,
-	transferAmount Amount,
-	fundingAccountID AccountID,
-	toAccountID AccountID,
-) error {
-	const debitFundingAccountQuery = `
-		update ledger_accounts
-		set balance = balance - $1
-		where id = $2;
-	`
-
-	_, err := tx.ExecContext(
-		ctx,
-		debitFundingAccountQuery,
-		transferAmount,
-		fundingAccountID,
-	)
-	if err != nil {
-		return err
-	}
-
-	const creditToAccountQuery = `
-		update ledger_accounts
-		set balance = balance + $1
-		where id = $2;
-	`
-
-	_, err = tx.ExecContext(
-		ctx,
-		creditToAccountQuery,
-		transferAmount,
-		toAccountID,
 	)
 	if err != nil {
 		return err

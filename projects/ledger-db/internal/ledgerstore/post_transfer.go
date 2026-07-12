@@ -31,9 +31,10 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	transactionID, err := checkIdempotencyRequest(
+	transactionID, err := findSameLedgerTransaction(
 		ctx,
 		tx,
+		"transfer",
 		cmd.IdempotencyKey,
 		cmd.FromAccountID,
 		cmd.ToAccountID,
@@ -47,14 +48,10 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return transactionID, nil
 	}
 
-	conflictingTransactionID, err := checkIdempotencyConflict2(
+	conflictingTransactionID, err := findLedgerTransactionByIdempotencyKey(
 		ctx,
 		tx,
 		cmd.IdempotencyKey,
-		cmd.FromAccountID,
-		cmd.ToAccountID,
-		cmd.Amount,
-		fromCurrency,
 	)
 	if err != nil && !errors.Is(err, ErrNoRowsFound) {
 		return 0, err
@@ -67,15 +64,35 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	transactionID, err = insertTransaction(
+	transactionID, err = insertLedgerTransaction(
 		ctx,
 		tx,
+		"transfer",
 		cmd.IdempotencyKey,
 		cmd.FromAccountID,
 		cmd.ToAccountID,
 		cmd.Amount,
 		fromCurrency,
 	)
+	if errors.Is(err, ErrNoRowsFound) {
+		transactionID, err = findSameLedgerTransaction(
+			ctx,
+			tx,
+			"transfer",
+			cmd.IdempotencyKey,
+			cmd.FromAccountID,
+			cmd.ToAccountID,
+			cmd.Amount,
+			fromCurrency,
+		)
+		if err == nil {
+			return transactionID, nil
+		}
+		if errors.Is(err, ErrNoRowsFound) {
+			return 0, ErrIdempotencyConflict
+		}
+		return 0, err
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -89,7 +106,10 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	if err := updateTransferBalances(ctx, tx, cmd.Amount, cmd.FromAccountID, cmd.ToAccountID); err != nil {
+	if err := adjustAccountBalance(ctx, tx, cmd.FromAccountID, -cmd.Amount); err != nil {
+		return 0, err
+	}
+	if err := adjustAccountBalance(ctx, tx, cmd.ToAccountID, cmd.Amount); err != nil {
 		return 0, err
 	}
 

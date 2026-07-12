@@ -31,7 +31,8 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	transactionID, err := checkSameIdempotencyRequest(ctx, tx,
+	transactionID, err := findSameLedgerTransaction(ctx, tx,
+		"deposit",
 		cmd.IdempotencyKey,
 		fundingAccountID,
 		cmd.ToAccountID,
@@ -45,7 +46,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return TransactionID(transactionID), nil
 	}
 
-	conflictingTransactionID, err := checkIdempotencyConflict(ctx, tx, cmd.IdempotencyKey)
+	conflictingTransactionID, err := findLedgerTransactionByIdempotencyKey(ctx, tx, cmd.IdempotencyKey)
 	if err != nil && !errors.Is(err, ErrNoRowsFound) {
 		return 0, err
 	}
@@ -56,12 +57,32 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	transactionID, err = insertLedgerTransaction(
 		ctx,
 		tx,
+		"deposit",
 		cmd.IdempotencyKey,
 		fundingAccountID,
 		cmd.ToAccountID,
 		cmd.TransferAmount,
 		toAccountCurrency,
 	)
+	if errors.Is(err, ErrNoRowsFound) {
+		transactionID, err = findSameLedgerTransaction(
+			ctx,
+			tx,
+			"deposit",
+			cmd.IdempotencyKey,
+			fundingAccountID,
+			cmd.ToAccountID,
+			cmd.TransferAmount,
+			toAccountCurrency,
+		)
+		if err == nil {
+			return transactionID, nil
+		}
+		if errors.Is(err, ErrNoRowsFound) {
+			return 0, ErrIdempotencyConflict
+		}
+		return 0, err
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -74,7 +95,10 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	if err := updateBalances(ctx, tx, cmd.TransferAmount, fundingAccountID, cmd.ToAccountID); err != nil {
+	if err := adjustAccountBalance(ctx, tx, fundingAccountID, -cmd.TransferAmount); err != nil {
+		return 0, err
+	}
+	if err := adjustAccountBalance(ctx, tx, cmd.ToAccountID, cmd.TransferAmount); err != nil {
 		return 0, err
 	}
 

@@ -15,8 +15,8 @@ create table ledger_accounts (
 
 create table ledger_transactions (
     id bigserial primary key,
-    -- type will be transfer | reversal
-    type text not null check(type in ('transfer', 'reversal')),
+    -- type will be transfer | deposit | reversal
+    type text not null check(type in ('transfer', 'deposit', 'reversal')),
     idempotency_key text not null unique,
     created_at timestamptz not null default now(),
     from_account_id bigint not null references ledger_accounts(id),

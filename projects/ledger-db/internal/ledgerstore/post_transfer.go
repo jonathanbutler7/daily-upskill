@@ -22,7 +22,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	toCurrency, err := lockToAccount(ctx, tx, cmd.ToAccountID)
+	_, toCurrency, err := lockFromAccount(ctx, tx, cmd.ToAccountID)
 	if err != nil {
 		return 0, err
 	}
@@ -80,7 +80,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	if err := insertEntries(ctx, tx, transactionID, cmd.Amount, cmd.FromAccountID, cmd.ToAccountID); err != nil {
+	if err := insertLedgerEntries(ctx, tx, transactionID, cmd.Amount, cmd.FromAccountID, cmd.ToAccountID); err != nil {
 		return 0, err
 	}
 

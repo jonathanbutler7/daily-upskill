@@ -12,7 +12,7 @@ PostTransfer SQL helper functions
 
 *****************/
 
-// 000 Look up and lock the from account
+// 0 Look up and lock the from account
 func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (Amount, CurrencyCode, error) {
 	const q = `
 		select balance, currency_code
@@ -33,26 +33,7 @@ func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (
 	return Amount(balance), CurrencyCode(currencyCode), nil
 }
 
-// 001 Look up and lock the to account
-func lockToAccount(ctx context.Context, tx *sql.Tx, toAccountID AccountID) (CurrencyCode, error) {
-	const q = `
-		select currency_code
-		from ledger_accounts
-		where id = $1
-		for update;
-	`
-	var currencyCode string
-	err := tx.QueryRowContext(ctx, q, toAccountID).Scan(&currencyCode)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrToAccountNotFound
-	}
-	if err != nil {
-		return "", err
-	}
-	return CurrencyCode(currencyCode), nil
-}
-
-// 002 Check currencies match
+// 2 Check currencies match
 func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 	if fromCurrency != toCurrency {
 		return ErrCurrencyMismatch
@@ -60,7 +41,7 @@ func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 	return nil
 }
 
-// 003 If this exact request already posted, return its transaction id
+// 3 If this exact request already posted, return its transaction id
 func checkIdempotencyRequest(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -98,7 +79,7 @@ func checkIdempotencyRequest(
 	return TransactionID(existingTransactionID), nil
 }
 
-// 004 If the key exists for a different request, reject it
+// 4 If the key exists for a different request, reject it
 func checkIdempotencyConflict2(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -142,7 +123,7 @@ func checkIdempotencyConflict2(
 // race conditions are handled correctly by idempotency
 // perform pg_sleep(5);
 
-// 005 Check balance
+// 5 Check balance
 func checkBalance(fromBalance, transferAmount Amount) error {
 	if fromBalance < transferAmount {
 		return ErrInsufficientFunds
@@ -150,7 +131,7 @@ func checkBalance(fromBalance, transferAmount Amount) error {
 	return nil
 }
 
-// 006 Insert transaction
+// 6 Insert transaction
 func insertTransaction(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -215,34 +196,7 @@ func insertTransaction(
 	return TransactionID(transactionID), nil
 }
 
-// 007 Insert entries
-func insertEntries(
-	ctx context.Context,
-	tx *sql.Tx,
-	transactionID TransactionID,
-	transferAmount Amount,
-	fromAccountID AccountID,
-	toAccountID AccountID,
-) error {
-	const q = `
-		insert into ledger_entries (transaction_id, account_id, amount)
-		values
-			($1, $2, $3),
-			($1, $4, $5);
-	`
-	_, err := tx.ExecContext(
-		ctx,
-		q,
-		transactionID,
-		fromAccountID,
-		-transferAmount,
-		toAccountID,
-		transferAmount,
-	)
-	return err
-}
-
-// 008 Update balances
+// 8 Update balances
 func updateTransferBalances(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -497,7 +451,7 @@ func updateBalances(
 	fundingAccountID AccountID,
 	toAccountID AccountID,
 ) error {
-	const debitFundingAccount = `
+	const debitFundingAccountQuery = `
 		update ledger_accounts
 		set balance = balance - $1
 		where id = $2;
@@ -505,7 +459,7 @@ func updateBalances(
 
 	_, err := tx.ExecContext(
 		ctx,
-		debitFundingAccount,
+		debitFundingAccountQuery,
 		transferAmount,
 		fundingAccountID,
 	)
@@ -513,7 +467,7 @@ func updateBalances(
 		return err
 	}
 
-	const creditToAccount = `
+	const creditToAccountQuery = `
 		update ledger_accounts
 		set balance = balance + $1
 		where id = $2;
@@ -521,7 +475,7 @@ func updateBalances(
 
 	_, err = tx.ExecContext(
 		ctx,
-		creditToAccount,
+		creditToAccountQuery,
 		transferAmount,
 		toAccountID,
 	)

@@ -14,11 +14,11 @@ func PostExternalTransfer(
 	db *sql.DB,
 	cmd ledgerstore.PostExternalTransferCommand,
 ) (ledgerstore.TransactionID, error) {
-	if cmd.ToAccountID <= 0 {
-		return 0, ledgerstore.ErrToAccountIDRequired
-	}
 	if cmd.TransferAmount <= 0 {
 		return 0, ledgerstore.ErrTransferAmountRequired
+	}
+	if cmd.ToAccountID <= 0 {
+		return 0, ledgerstore.ErrToAccountIDRequired
 	}
 	if cmd.Rail == "" {
 		return 0, ledgerstore.ErrRailValueRequired

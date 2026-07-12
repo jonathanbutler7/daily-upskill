@@ -19,16 +19,16 @@ type TransferCommand struct {
 }
 
 type PostTransferCommand struct {
-	FromAccountID  AccountID
-	ToAccountID    AccountID
-	Amount         Amount
 	IdempotencyKey IdempotencyKey
+	Amount         Amount
+	ToAccountID    AccountID
+	FromAccountID  AccountID
 }
 
 type PostExternalTransferCommand struct {
-	ToAccountID       AccountID
+	IdempotencyKey    IdempotencyKey
 	TransferAmount    Amount
+	ToAccountID       AccountID
 	Rail              PaymentRail
 	ExternalReference ExternalReference
-	IdempotencyKey    IdempotencyKey
 }

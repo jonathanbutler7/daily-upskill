@@ -6,7 +6,7 @@ var (
 	ErrAmountGreaterThanZero         = errors.New("amount must be greater than 0")
 	ErrCashSettlementAccountNotFound = errors.New("Cash Settlement account not found")
 	ErrCurrencyMismatch              = errors.New("currency mismatch")
-	ErrExternalReferenceEmpty      = errors.New("external reference must not be empty")
+	ErrExternalReferenceEmpty        = errors.New("external reference must not be empty")
 	ErrExternalReferenceRequired     = errors.New("externalReference is required")
 	ErrFromAccountIDRequired         = errors.New("from account id is required")
 	ErrFromAccountNotFound           = errors.New("from account not found")

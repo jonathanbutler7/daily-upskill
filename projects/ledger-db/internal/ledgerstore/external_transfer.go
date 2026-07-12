@@ -32,7 +32,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 
 	transactionID, err := findSameLedgerTransaction(ctx, tx,
-		"deposit",
+		LedgerTransactionTypeDeposit,
 		cmd.IdempotencyKey,
 		fundingAccountID,
 		cmd.ToAccountID,
@@ -105,9 +105,9 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	if err := insertExternalTransfers(
 		ctx,
 		tx,
-		ExternalTransferDirection("deposit"),
+		ExternalTransferDirectionDeposit,
 		cmd.Rail,
-		ExternalTransferStatus("posted"),
+		ExternalTransferStatusPosted,
 		cmd.ExternalReference,
 		cmd.ToAccountID,
 		transactionID,

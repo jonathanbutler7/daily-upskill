@@ -12,8 +12,8 @@ PostTransfer SQL helper functions
 
 *****************/
 
-// 0 Look up and lock the from account
-func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (Amount, CurrencyCode, error) {
+// 0 Look up and lock an account
+func lockAccountForUpdate(ctx context.Context, tx *sql.Tx, accountID AccountID) (Amount, CurrencyCode, error) {
 	const q = `
 		select balance, currency_code
 		from ledger_accounts
@@ -23,14 +23,25 @@ func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (
 
 	var balance int64
 	var currencyCode string
-	err := tx.QueryRowContext(ctx, q, fromAccountID).Scan(&balance, &currencyCode)
+	err := tx.QueryRowContext(ctx, q, accountID).Scan(&balance, &currencyCode)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, "", ErrFromAccountNotFound
+		return 0, "", ErrNoRowsFound
 	}
 	if err != nil {
 		return 0, "", err
 	}
 	return Amount(balance), CurrencyCode(currencyCode), nil
+}
+
+func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (Amount, CurrencyCode, error) {
+	balance, currencyCode, err := lockAccountForUpdate(ctx, tx, fromAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
+		return 0, "", ErrFromAccountNotFound
+	}
+	if err != nil {
+		return 0, "", err
+	}
+	return balance, currencyCode, nil
 }
 
 // 2 Check currencies match
@@ -45,7 +56,7 @@ func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 func findSameLedgerTransaction(
 	ctx context.Context,
 	tx *sql.Tx,
-	transactionType string,
+	transactionType LedgerTransactionType,
 	idempotencyKey IdempotencyKey,
 	fromAccountID AccountID,
 	toAccountID AccountID,
@@ -124,7 +135,7 @@ func checkBalance(fromBalance, transferAmount Amount) error {
 func insertLedgerTransaction(
 	ctx context.Context,
 	tx *sql.Tx,
-	transactionType string,
+	transactionType LedgerTransactionType,
 	idempotencyKey IdempotencyKey,
 	fromAccountID AccountID,
 	toAccountID AccountID,
@@ -218,16 +229,8 @@ func lockToAccountCurrencyForUpdate(
 	tx *sql.Tx,
 	toAccountID AccountID,
 ) (CurrencyCode, error) {
-	const q = `
-		select currency_code
-		from ledger_accounts
-		where id = $1
-		for update;
-	`
-
-	var currencyCode string
-	err := tx.QueryRowContext(ctx, q, toAccountID).Scan(&currencyCode)
-	if errors.Is(err, sql.ErrNoRows) {
+	_, currencyCode, err := lockAccountForUpdate(ctx, tx, toAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
 		return "", ErrToAccountNotFound
 	}
 	if err != nil {

@@ -22,7 +22,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	_, toCurrency, err := lockFromAccount(ctx, tx, cmd.ToAccountID)
+	toCurrency, err := lockToAccountCurrencyForUpdate(ctx, tx, cmd.ToAccountID)
 	if err != nil {
 		return 0, err
 	}
@@ -34,7 +34,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 	transactionID, err := findSameLedgerTransaction(
 		ctx,
 		tx,
-		"transfer",
+		LedgerTransactionTypeTransfer,
 		cmd.IdempotencyKey,
 		cmd.FromAccountID,
 		cmd.ToAccountID,
@@ -67,7 +67,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 	transactionID, err = insertLedgerTransaction(
 		ctx,
 		tx,
-		"transfer",
+		LedgerTransactionTypeTransfer,
 		cmd.IdempotencyKey,
 		cmd.FromAccountID,
 		cmd.ToAccountID,
@@ -78,7 +78,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		transactionID, err = findSameLedgerTransaction(
 			ctx,
 			tx,
-			"transfer",
+			LedgerTransactionTypeTransfer,
 			cmd.IdempotencyKey,
 			cmd.FromAccountID,
 			cmd.ToAccountID,

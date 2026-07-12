@@ -10,6 +10,21 @@ type PaymentRail string
 type ExternalReference string
 type ExternalTransferDirection string
 type ExternalTransferStatus string
+type LedgerTransactionType string
+
+const (
+	LedgerTransactionTypeTransfer LedgerTransactionType = "transfer"
+	LedgerTransactionTypeDeposit  LedgerTransactionType = "deposit"
+	LedgerTransactionTypeReversal LedgerTransactionType = "reversal"
+
+	ExternalTransferDirectionDeposit    ExternalTransferDirection = "deposit"
+	ExternalTransferDirectionWithdrawal ExternalTransferDirection = "withdrawal"
+
+	ExternalTransferStatusPosted   ExternalTransferStatus = "posted"
+	ExternalTransferStatusPending  ExternalTransferStatus = "pending"
+	ExternalTransferStatusFailed   ExternalTransferStatus = "failed"
+	ExternalTransferStatusCanceled ExternalTransferStatus = "canceled"
+)
 
 type TransferCommand struct {
 	FromAccountID  AccountID

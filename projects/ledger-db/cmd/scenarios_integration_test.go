@@ -156,7 +156,7 @@ func TestScenarioAliceSendsBob(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	depositID, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		ToAccountID:       accounts.alice,
+		UserAccountID:       accounts.alice,
 		TransferAmount:    2000,
 		Rail:              "ach",
 		ExternalReference: "seed-alice-2000-ext",
@@ -197,7 +197,7 @@ func TestScenarioIdempotency(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		ToAccountID:       accounts.alice,
+		UserAccountID:       accounts.alice,
 		TransferAmount:    2000,
 		Rail:              "ach",
 		ExternalReference: "alice-idempotency-seed-ext",
@@ -245,7 +245,7 @@ func TestScenarioInsufficientFunds(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		ToAccountID:       accounts.alice,
+		UserAccountID:       accounts.alice,
 		TransferAmount:    2000,
 		Rail:              "ach",
 		ExternalReference: "alice-insufficient-seed-ext",
@@ -280,7 +280,7 @@ func TestScenarioTransferToMissingAccount(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		ToAccountID:       accounts.alice,
+		UserAccountID:       accounts.alice,
 		TransferAmount:    2000,
 		Rail:              "ach",
 		ExternalReference: "alice-missing-to-seed-ext",
@@ -315,7 +315,7 @@ func TestScenarioMismatchedIdempotencyKey(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		ToAccountID:       accounts.alice,
+		UserAccountID:       accounts.alice,
 		TransferAmount:    5000,
 		Rail:              "ach",
 		ExternalReference: "alice-mismatch-seed-ext",
@@ -360,7 +360,7 @@ func TestScenarioStoredAndDerivedBalances(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		ToAccountID:       accounts.alice,
+		UserAccountID:       accounts.alice,
 		TransferAmount:    2000,
 		Rail:              "ach",
 		ExternalReference: "alice-balance-check-seed-ext",

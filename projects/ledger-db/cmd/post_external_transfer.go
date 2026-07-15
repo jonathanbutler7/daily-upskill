@@ -17,7 +17,7 @@ func PostExternalTransfer(
 	if cmd.TransferAmount <= 0 {
 		return 0, ledgerstore.ErrTransferAmountRequired
 	}
-	if cmd.ToAccountID <= 0 {
+	if cmd.UserAccountID <= 0 {
 		return 0, ledgerstore.ErrToAccountIDRequired
 	}
 	if cmd.Rail == "" {
@@ -30,15 +30,23 @@ func PostExternalTransfer(
 		return 0, ledgerstore.ErrIdempotencyKeyRequired
 	}
 
+	isDeposit := cmd.ExternalTransferDirection == ledgerstore.ExternalTransferDirectionDeposit
+	isWithdrawal := cmd.ExternalTransferDirection == ledgerstore.ExternalTransferDirectionWithdrawal
+
+	if !isDeposit && !isWithdrawal {
+		return 0, ledgerstore.ErrMustBeWithdrawalOrDeposit
+	}
+
 	transactionID, err := ledgerstore.PostExternalTransfer(
 		ctx,
 		db,
 		ledgerstore.PostExternalTransferCommand{
-			ToAccountID:       ledgerstore.AccountID(cmd.ToAccountID),
-			TransferAmount:    ledgerstore.Amount(cmd.TransferAmount),
-			Rail:              ledgerstore.PaymentRail(cmd.Rail),
-			ExternalReference: ledgerstore.ExternalReference(cmd.ExternalReference),
-			IdempotencyKey:    ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
+			UserAccountID:             ledgerstore.AccountID(cmd.UserAccountID),
+			TransferAmount:            ledgerstore.Amount(cmd.TransferAmount),
+			Rail:                      ledgerstore.PaymentRail(cmd.Rail),
+			ExternalReference:         ledgerstore.ExternalReference(cmd.ExternalReference),
+			IdempotencyKey:            ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
+			ExternalTransferDirection: cmd.ExternalTransferDirection,
 		})
 
 	if errors.Is(err, ledgerstore.ErrAmountGreaterThanZero) {

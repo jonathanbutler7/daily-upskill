@@ -217,12 +217,6 @@ func verifyTransactionBalances(ctx context.Context, tx *sql.Tx, transactionID Tr
 	return nil
 }
 
-/****************
-
-DepositFunds SQL helper functions
-
-*****************/
-
 // Validate the to_account_id exists and lock row
 func lockToAccountCurrencyForUpdate(
 	ctx context.Context,

@@ -33,11 +33,12 @@ func main() {
 
 	transactionID, err := cmd.PostExternalTransfer(ctx, db,
 		ledgerstore.PostExternalTransferCommand{
-			ToAccountID:       1,
-			TransferAmount:    1000,
-			Rail:              "ach",
-			ExternalReference: "external-id",
-			IdempotencyKey:    "a-key-113",
+			UserAccountID:             1,
+			TransferAmount:            1000,
+			Rail:                      "ach",
+			ExternalReference:         "external-id",
+			IdempotencyKey:            "a-key-113",
+			ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 		})
 	if err != nil {
 		log.Fatal(err)

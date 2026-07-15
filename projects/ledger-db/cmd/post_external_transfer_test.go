@@ -14,6 +14,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 		rail                string
 		externalReferenceID string
 		idempotencyKey      string
+		direction           ledgerstore.ExternalTransferDirection
 		wantErr             error
 	}{
 		{
@@ -23,6 +24,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "string",
 			idempotencyKey:      "string",
+			direction:           ledgerstore.ExternalTransferDirectionDeposit,
 			wantErr:             ledgerstore.ErrToAccountIDRequired,
 		},
 		{
@@ -32,6 +34,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "string",
 			idempotencyKey:      "string",
+			direction:           ledgerstore.ExternalTransferDirectionDeposit,
 			wantErr:             ledgerstore.ErrTransferAmountRequired,
 		},
 		{
@@ -41,6 +44,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "",
 			externalReferenceID: "string",
 			idempotencyKey:      "string",
+			direction:           ledgerstore.ExternalTransferDirectionDeposit,
 			wantErr:             ledgerstore.ErrRailValueRequired,
 		},
 		{
@@ -50,6 +54,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "",
 			idempotencyKey:      "string",
+			direction:           ledgerstore.ExternalTransferDirectionDeposit,
 			wantErr:             ledgerstore.ErrExternalReferenceRequired,
 		},
 		{
@@ -59,6 +64,7 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 			rail:                "string",
 			externalReferenceID: "string",
 			idempotencyKey:      "",
+			direction:           ledgerstore.ExternalTransferDirectionDeposit,
 			wantErr:             ledgerstore.ErrIdempotencyKeyRequired,
 		},
 	}
@@ -69,11 +75,12 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 				ctx,
 				nil,
 				ledgerstore.PostExternalTransferCommand{
-					ToAccountID:       ledgerstore.AccountID(tt.toAccountID),
-					TransferAmount:    ledgerstore.Amount(tt.amount),
-					Rail:              ledgerstore.PaymentRail(tt.rail),
-					ExternalReference: ledgerstore.ExternalReference(tt.externalReferenceID),
-					IdempotencyKey:    ledgerstore.IdempotencyKey(tt.idempotencyKey),
+					UserAccountID:             ledgerstore.AccountID(tt.toAccountID),
+					TransferAmount:            ledgerstore.Amount(tt.amount),
+					Rail:                      ledgerstore.PaymentRail(tt.rail),
+					ExternalReference:         ledgerstore.ExternalReference(tt.externalReferenceID),
+					IdempotencyKey:            ledgerstore.IdempotencyKey(tt.idempotencyKey),
+					ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 				},
 			)
 			if err == nil {

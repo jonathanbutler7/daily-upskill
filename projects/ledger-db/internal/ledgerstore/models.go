@@ -41,9 +41,10 @@ type PostTransferCommand struct {
 }
 
 type PostExternalTransferCommand struct {
-	IdempotencyKey    IdempotencyKey
-	TransferAmount    Amount
-	ToAccountID       AccountID
-	Rail              PaymentRail
-	ExternalReference ExternalReference
+	IdempotencyKey            IdempotencyKey
+	TransferAmount            Amount
+	UserAccountID             AccountID
+	Rail                      PaymentRail
+	ExternalReference         ExternalReference
+	ExternalTransferDirection ExternalTransferDirection
 }

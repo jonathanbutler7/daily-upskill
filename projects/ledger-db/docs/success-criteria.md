@@ -39,11 +39,11 @@ Money can enter or leave this ledger, but the ledger still has to stay balanced.
 - [x] External bank accounts, card networks, processors, or payment rails should not be treated as normal user ledger accounts.
 - [x] The ledger should use an internal account, such as cash, settlement, clearing, external funds, or processor receivable, to represent money controlled or expected by the system.
 - [x] A deposit posts balanced entries between the receiving user account and the internal funding or settlement account.
-- [ ] A withdrawal posts balanced entries between the sending user account and the internal funding or settlement account.
+- [x] A withdrawal posts balanced entries between the sending user account and the internal funding or settlement account.
 - [x] External payment identifiers should be stored separately from ledger entries.
 - [ ] External payment status should be reconciled against ledger activity.
-- [ ] The docs explain the difference between an external real-world account and an internal ledger account that represents that external relationship.
-- [ ] The docs explain whether deposits are posted only after settlement or first posted as pending/clearing activity.
+- [x] The docs explain the difference between an external real-world account and an internal ledger account that represents that external relationship.
+- [x] The docs explain whether deposits are posted only after settlement or first posted as pending/clearing activity.
 - [x] The project has a scenario showing money entering the ledger from an external source.
 - [ ] The project has a scenario showing the external reference used to reconcile that deposit.
 
@@ -97,7 +97,7 @@ The project should make a deliberate choice about what belongs in Go and what be
 - [x] Entry amounts must never be zero.
 - [x] Account currency must match transaction currency.
 - [x] A transaction should not move money across currencies unless an FX flow exists.
-- [ ] Transaction `type` should be constrained to known values.
+- [x] Transaction `type` should be constrained to known values.
 - [ ] Currency codes should be constrained to a known format.
 - [ ] The project should document whether it relies on constraints, triggers, permissions, or function-only writes for each invariant.
 - [ ] The project should include at least one negative scenario that proves unsafe writes fail.
@@ -116,7 +116,7 @@ The Go layer does not need to be a full production API, but it should be real en
 - [x] Return a clear insufficient-funds error.
 - [ ] Keep database errors from leaking directly to callers.
 - [x] Use database transactions deliberately from Go where Go owns orchestration.
-- [ ] Add tests around the Go boundary for success, retry, conflict, and insufficient funds.
+- [x] Add tests around the Go boundary for success, retry, conflict, and insufficient funds.
 - [ ] Document which ledger rules Go must not try to enforce by stale preflight reads.
 
 ## Scenario Requirements

@@ -15,6 +15,13 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, ErrExternalReferenceRequired
 	}
 
+	isDeposit := cmd.ExternalTransferDirection == ExternalTransferDirectionDeposit
+	isWithdrawal := cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal
+
+	if !isDeposit && !isWithdrawal {
+		return 0, ErrMustBeWithdrawalOrDeposit
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err

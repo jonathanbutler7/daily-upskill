@@ -150,17 +150,43 @@ func assertRowCount(t *testing.T, ctx context.Context, db *sql.DB, table string,
 	}
 }
 
+func assertExternalTransfer(t *testing.T, ctx context.Context, db *sql.DB, externalReference string, direction ledgerstore.ExternalTransferDirection, userAccountID ledgerstore.AccountID, transactionID ledgerstore.TransactionID) {
+	t.Helper()
+
+	var gotDirection string
+	var gotUserAccountID int64
+	var gotTransactionID int64
+	err := db.QueryRowContext(ctx, `
+		select direction, user_account_id, ledger_transaction_id
+		from external_transfers
+		where external_reference = $1;
+	`, externalReference).Scan(&gotDirection, &gotUserAccountID, &gotTransactionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotDirection != string(direction) {
+		t.Fatalf("external transfer direction = %q, want %q", gotDirection, direction)
+	}
+	if ledgerstore.AccountID(gotUserAccountID) != userAccountID {
+		t.Fatalf("external transfer user_account_id = %d, want %d", gotUserAccountID, userAccountID)
+	}
+	if ledgerstore.TransactionID(gotTransactionID) != transactionID {
+		t.Fatalf("external transfer ledger_transaction_id = %d, want %d", gotTransactionID, transactionID)
+	}
+}
+
 func TestScenarioAliceSendsBob(t *testing.T) {
 	ctx, db := openIntegrationDB(t)
 	resetScenarioDB(t, ctx, db)
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	depositID, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		UserAccountID:       accounts.alice,
-		TransferAmount:    2000,
-		Rail:              "ach",
-		ExternalReference: "seed-alice-2000-ext",
-		IdempotencyKey:    "seed-alice-2000",
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "seed-alice-2000-ext",
+		IdempotencyKey:            "seed-alice-2000",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -191,17 +217,154 @@ func TestScenarioAliceSendsBob(t *testing.T) {
 	assertRowCount(t, ctx, db, "ledger_entries", 4)
 }
 
+func TestScenarioWithdrawal(t *testing.T) {
+	ctx, db := openIntegrationDB(t)
+	resetScenarioDB(t, ctx, db)
+	accounts := seedAliceAndBob(t, ctx, db)
+
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-withdrawal-seed-ext",
+		IdempotencyKey:            "alice-withdrawal-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	withdrawalID, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            500,
+		Rail:                      "ach",
+		ExternalReference:         "alice-withdrawal-500-ext",
+		IdempotencyKey:            "alice-withdrawal-500",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionWithdrawal,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withdrawalID != 2 {
+		t.Fatalf("withdrawalID = %d, want 2", withdrawalID)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement": -1500,
+		"Alice":           1500,
+		"Bob":             0,
+	})
+	assertExternalTransfer(t, ctx, db, "alice-withdrawal-500-ext", ledgerstore.ExternalTransferDirectionWithdrawal, accounts.alice, withdrawalID)
+	assertRowCount(t, ctx, db, "ledger_transactions", 2)
+	assertRowCount(t, ctx, db, "ledger_entries", 4)
+	assertRowCount(t, ctx, db, "external_transfers", 2)
+}
+
+func TestScenarioWithdrawalIdempotency(t *testing.T) {
+	ctx, db := openIntegrationDB(t)
+	resetScenarioDB(t, ctx, db)
+	accounts := seedAliceAndBob(t, ctx, db)
+
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            500,
+		Rail:                      "ach",
+		ExternalReference:         "alice-withdrawal-idempotency-seed-ext",
+		IdempotencyKey:            "alice-withdrawal-idempotency-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstID, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            500,
+		Rail:                      "ach",
+		ExternalReference:         "alice-withdrawal-idempotency-ext",
+		IdempotencyKey:            "alice-withdrawal-idempotency",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionWithdrawal,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secondID, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            500,
+		Rail:                      "ach",
+		ExternalReference:         "alice-withdrawal-idempotency-ext",
+		IdempotencyKey:            "alice-withdrawal-idempotency",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionWithdrawal,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondID != firstID {
+		t.Fatalf("secondID = %d, want original transaction %d", secondID, firstID)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement": 0,
+		"Alice":           0,
+		"Bob":             0,
+	})
+	assertRowCount(t, ctx, db, "ledger_transactions", 2)
+	assertRowCount(t, ctx, db, "ledger_entries", 4)
+	assertRowCount(t, ctx, db, "external_transfers", 2)
+}
+
+func TestScenarioWithdrawalInsufficientFunds(t *testing.T) {
+	ctx, db := openIntegrationDB(t)
+	resetScenarioDB(t, ctx, db)
+	accounts := seedAliceAndBob(t, ctx, db)
+
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            200,
+		Rail:                      "ach",
+		ExternalReference:         "alice-withdrawal-insufficient-seed-ext",
+		IdempotencyKey:            "alice-withdrawal-insufficient-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            500,
+		Rail:                      "ach",
+		ExternalReference:         "alice-withdrawal-insufficient-ext",
+		IdempotencyKey:            "alice-withdrawal-insufficient",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionWithdrawal,
+	})
+	if !errors.Is(err, ledgerstore.ErrInsufficientFunds) {
+		t.Fatalf("err = %v, want %v", err, ledgerstore.ErrInsufficientFunds)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement": -200,
+		"Alice":           200,
+		"Bob":             0,
+	})
+	assertRowCount(t, ctx, db, "ledger_transactions", 1)
+	assertRowCount(t, ctx, db, "ledger_entries", 2)
+	assertRowCount(t, ctx, db, "external_transfers", 1)
+}
+
 func TestScenarioIdempotency(t *testing.T) {
 	ctx, db := openIntegrationDB(t)
 	resetScenarioDB(t, ctx, db)
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		UserAccountID:       accounts.alice,
-		TransferAmount:    2000,
-		Rail:              "ach",
-		ExternalReference: "alice-idempotency-seed-ext",
-		IdempotencyKey:    "alice-idempotency-seed",
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-idempotency-seed-ext",
+		IdempotencyKey:            "alice-idempotency-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -245,11 +408,12 @@ func TestScenarioInsufficientFunds(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		UserAccountID:       accounts.alice,
-		TransferAmount:    2000,
-		Rail:              "ach",
-		ExternalReference: "alice-insufficient-seed-ext",
-		IdempotencyKey:    "alice-insufficient-seed",
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-insufficient-seed-ext",
+		IdempotencyKey:            "alice-insufficient-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -280,11 +444,12 @@ func TestScenarioTransferToMissingAccount(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		UserAccountID:       accounts.alice,
-		TransferAmount:    2000,
-		Rail:              "ach",
-		ExternalReference: "alice-missing-to-seed-ext",
-		IdempotencyKey:    "alice-missing-to-seed",
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-missing-to-seed-ext",
+		IdempotencyKey:            "alice-missing-to-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -315,11 +480,12 @@ func TestScenarioMismatchedIdempotencyKey(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		UserAccountID:       accounts.alice,
-		TransferAmount:    5000,
-		Rail:              "ach",
-		ExternalReference: "alice-mismatch-seed-ext",
-		IdempotencyKey:    "alice-mismatch-seed",
+		UserAccountID:             accounts.alice,
+		TransferAmount:            5000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-mismatch-seed-ext",
+		IdempotencyKey:            "alice-mismatch-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -360,11 +526,12 @@ func TestScenarioStoredAndDerivedBalances(t *testing.T) {
 	accounts := seedAliceAndBob(t, ctx, db)
 
 	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
-		UserAccountID:       accounts.alice,
-		TransferAmount:    2000,
-		Rail:              "ach",
-		ExternalReference: "alice-balance-check-seed-ext",
-		IdempotencyKey:    "alice-balance-check-seed",
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-balance-check-seed-ext",
+		IdempotencyKey:            "alice-balance-check-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 	})
 	if err != nil {
 		t.Fatal(err)

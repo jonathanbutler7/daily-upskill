@@ -24,8 +24,8 @@ This project should be strong enough to talk through as an industry-style ledger
 - [x] Same idempotency key with a different request fails.
 - [x] Concurrent retries with the same request move money once.
 - [x] Stored balances can be compared against balances derived from entries.
-- [ ] Each posted ledger transaction must balance to zero.
-- [ ] The project must prove how unbalanced transactions are prevented.
+- [x] Each posted ledger transaction must balance to zero.
+- [x] The project must prove how unbalanced transactions are prevented.
 - [x] Posted ledger entries must be immutable.
 - [x] Posted ledger transactions must be immutable except for safe metadata.
 
@@ -79,7 +79,7 @@ The project should make a deliberate choice about what belongs in Go and what be
 - [x] There is a query or view that derives balances from entries.
 - [x] There is a scenario comparing derived balances to `ledger_accounts.balance`.
 - [x] Balance comparison should return no mismatches after valid scenarios.
-- [ ] The docs explain why stored balances exist if entries are the audit record.
+- [x] The docs explain why stored balances exist if entries are the audit record.
 - [ ] The docs explain what happens if stored balances and derived balances disagree.
 - [ ] There is a true-up or repair plan, even if it is manual for this project.
 - [ ] The project names which transaction states count toward derived balances.
@@ -106,7 +106,7 @@ The project should make a deliberate choice about what belongs in Go and what be
 
 The Go layer does not need to be a full production API, but it should be real enough to show how an application would use the ledger safely.
 
-- [ ] Define Go types for ledger commands, results, and application errors.
+- [x] Define Go types for ledger commands, results, and application errors.
 - [x] Expose a transfer command through a Go function.
 - [x] Expose a deposit or funding command through a Go function.
 - [x] Validate request shape before calling the database.
@@ -117,7 +117,7 @@ The Go layer does not need to be a full production API, but it should be real en
 - [ ] Keep database errors from leaking directly to callers.
 - [x] Use database transactions deliberately from Go where Go owns orchestration.
 - [x] Add tests around the Go boundary for success, retry, conflict, and insufficient funds.
-- [ ] Document which ledger rules Go must not try to enforce by stale preflight reads.
+- [x] Document which ledger rules Go must not try to enforce by stale preflight reads.
 
 ## Scenario Requirements
 
@@ -140,8 +140,8 @@ Each important rule should have a small SQL scenario that can be run through `ps
 
 - [ ] Explain the schema in plain language.
 - [ ] Explain the lifecycle of a transaction from request to posted entries.
-- [ ] Explain the system boundary between Go and Postgres.
-- [ ] Explain how money enters the ledger from outside systems.
+- [x] Explain the system boundary between Go and Postgres.
+- [x] Explain how money enters the ledger from outside systems.
 - [ ] List the invariants the ledger depends on.
 - [ ] For each invariant, say where it is enforced:
   - Go request validation
@@ -154,7 +154,7 @@ Each important rule should have a small SQL scenario that can be run through `ps
   - database permissions
   - scenario test only
 - [ ] Link to the scenario that proves each implemented behavior.
-- [ ] Explain the difference between stored balances and derived balances.
+- [x] Explain the difference between stored balances and derived balances.
 - [ ] Explain why reversals are new transactions instead of edits.
 - [ ] Call out which shortcuts are learning shortcuts.
 - [ ] Call out which missing features would be required for production.

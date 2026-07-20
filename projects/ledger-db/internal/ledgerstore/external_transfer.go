@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+// A function to handle both depositing funds into the ledger-db
+// account as well as withdrawing funds from ledger-db into a
+// separate payment rail. 
+//
+// PostExternalTransfer requires the caller to tell in the direction
+// the money will move, and then it handles assigning the values 
+// and transferring money accordingly.
 func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTransferCommand) (TransactionID, error) {
 	if cmd.TransferAmount <= 0 {
 		return 0, ErrAmountGreaterThanZero
@@ -74,7 +81,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 
 	if cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal {
-		balance, _, err := lockFromAccount(ctx, tx, cmd.UserAccountID)
+		balance, _, err := lockAccountForUpdate(ctx, tx, cmd.UserAccountID)
 		if err != nil {
 			return 0, err
 		}

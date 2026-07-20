@@ -33,23 +33,23 @@ func lockAccountForUpdate(ctx context.Context, tx *sql.Tx, accountID AccountID) 
 	return Amount(balance), CurrencyCode(currencyCode), nil
 }
 
-func lockFromAccount(ctx context.Context, tx *sql.Tx, fromAccountID AccountID) (Amount, CurrencyCode, error) {
-	balance, currencyCode, err := lockAccountForUpdate(ctx, tx, fromAccountID)
-	if errors.Is(err, ErrNoRowsFound) {
-		return 0, "", ErrFromAccountNotFound
-	}
-	if err != nil {
-		return 0, "", err
-	}
-	return balance, currencyCode, nil
-}
-
 // 2 Check currencies match
 func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 	if fromCurrency != toCurrency {
 		return ErrCurrencyMismatch
 	}
 	return nil
+}
+
+func getTransactionById(
+	ctx context.Context,
+	tx *sql.Tx,
+	transactionID TransactionID,
+) (TransactionID, error) {
+	const q = ``
+
+	err := tx.QueryRowContext(ctx, q)
+	return nil, nil
 }
 
 // 3 If this exact request already posted, return its transaction id
@@ -265,7 +265,7 @@ func insertLedgerEntries(
 	tx *sql.Tx,
 	transactionID TransactionID,
 	transferAmount Amount,
-	fundingAccountID AccountID,
+	fromAccountID AccountID,
 	toAccountID AccountID,
 ) error {
 	const q = `
@@ -278,7 +278,7 @@ func insertLedgerEntries(
 		ctx,
 		q,
 		transactionID,
-		fundingAccountID,
+		fromAccountID,
 		-transferAmount,
 		transactionID,
 		toAccountID,

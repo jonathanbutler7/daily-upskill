@@ -11,6 +11,7 @@ type ExternalReference string
 type ExternalTransferDirection string
 type ExternalTransferStatus string
 type LedgerTransactionType string
+type Reason string
 
 const (
 	LedgerTransactionTypeTransfer LedgerTransactionType = "transfer"
@@ -47,4 +48,10 @@ type PostExternalTransferCommand struct {
 	Rail                      PaymentRail
 	ExternalReference         ExternalReference
 	ExternalTransferDirection ExternalTransferDirection
+}
+
+type ReversalCommand struct {
+	TransactionID  TransactionID
+	IdempotencyKey IdempotencyKey
+	Reason         Reason
 }

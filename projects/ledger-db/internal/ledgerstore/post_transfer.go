@@ -17,7 +17,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 	}
 	defer tx.Rollback()
 
-	fromBalance, fromCurrency, err := lockFromAccount(ctx, tx, cmd.FromAccountID)
+	fromBalance, fromCurrency, err := lockAccountForUpdate(ctx, tx, cmd.FromAccountID)
 	if err != nil {
 		return 0, err
 	}

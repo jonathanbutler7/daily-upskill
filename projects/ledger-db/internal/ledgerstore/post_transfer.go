@@ -97,8 +97,14 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	if err := insertLedgerEntries(ctx, tx, transactionID, cmd.Amount, cmd.FromAccountID, cmd.ToAccountID); err != nil {
-		return 0, err
+	entries := []LedgerEntryInput{
+		{AccountID: cmd.FromAccountID, Amount: -cmd.Amount},
+		{AccountID: cmd.ToAccountID, Amount: cmd.Amount},
+	}
+	for _, entry := range entries {
+		if err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
+			return 0, err
+		}
 	}
 
 	err = verifyTransactionBalances(ctx, tx, transactionID)

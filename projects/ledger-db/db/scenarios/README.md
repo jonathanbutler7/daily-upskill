@@ -7,7 +7,7 @@ They are not migrations or production scripts. They are meant to be run against 
 Each scenario starts with:
 
 ```sql
-truncate table external_transfers, ledger_entries, ledger_transactions, ledger_accounts restart identity;
+truncate table external_transfers, ledger_reversals, ledger_entries, ledger_transactions, ledger_accounts restart identity;
 \ir ../migrations/003_seed_system_accounts.sql
 ```
 

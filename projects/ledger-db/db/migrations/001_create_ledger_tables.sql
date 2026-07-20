@@ -1,8 +1,8 @@
 drop table if exists external_transfers;
+drop table if exists ledger_reversals;
 drop table if exists ledger_entries;
 drop table if exists ledger_transactions;
 drop table if exists ledger_accounts;
-drop table if exists ledger_reversals;
 
 create table ledger_accounts (
     id bigserial primary key,

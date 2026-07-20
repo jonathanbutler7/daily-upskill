@@ -41,17 +41,6 @@ func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 	return nil
 }
 
-func getTransactionById(
-	ctx context.Context,
-	tx *sql.Tx,
-	transactionID TransactionID,
-) (TransactionID, error) {
-	const q = ``
-
-	err := tx.QueryRowContext(ctx, q)
-	return nil, nil
-}
-
 // 3 If this exact request already posted, return its transaction id
 func findSameLedgerTransaction(
 	ctx context.Context,
@@ -259,34 +248,25 @@ func lockCashSettlementAccountForUpdate(
 	return AccountID(fundingAccountID), nil
 }
 
-// Insert ledger entries
-func insertLedgerEntries(
+func insertLedgerEntry(
 	ctx context.Context,
 	tx *sql.Tx,
 	transactionID TransactionID,
-	transferAmount Amount,
-	fromAccountID AccountID,
-	toAccountID AccountID,
+	entry LedgerEntryInput,
 ) error {
+	if entry.Amount == 0 {
+		return ErrAmountGreaterThanZero
+	}
+
 	const q = `
 		insert into ledger_entries (transaction_id, account_id, amount)
-    values
-        ($1, $2, $3),
-        ($4, $5, $6);
+		values ($1, $2, $3);
 	`
-	_, err := tx.ExecContext(
-		ctx,
-		q,
-		transactionID,
-		fromAccountID,
-		-transferAmount,
-		transactionID,
-		toAccountID,
-		transferAmount,
-	)
-	if err != nil {
+
+	if _, err := tx.ExecContext(ctx, q, transactionID, entry.AccountID, entry.Amount); err != nil {
 		return err
 	}
+
 	return nil
 }
 

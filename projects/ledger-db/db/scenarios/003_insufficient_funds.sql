@@ -1,5 +1,5 @@
 -- local/dev only
-truncate table external_transfers, ledger_entries, ledger_transactions, ledger_accounts restart identity;
+truncate table external_transfers, ledger_reversals, ledger_entries, ledger_transactions, ledger_accounts restart identity;
 
 \ir ../migrations/003_seed_system_accounts.sql
 

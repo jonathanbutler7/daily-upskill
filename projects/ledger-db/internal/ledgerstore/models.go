@@ -55,3 +55,27 @@ type ReversalCommand struct {
 	IdempotencyKey IdempotencyKey
 	Reason         Reason
 }
+
+type Transaction struct {
+	ID             TransactionID
+	Type           LedgerTransactionType
+	IdempotencyKey IdempotencyKey
+	CreatedAt      string
+	FromAccountID  AccountID
+	ToAccountID    AccountID
+	Amount         Amount
+	CurrencyCode   CurrencyCode
+}
+
+type Entry struct {
+	ID            int64
+	TransactionID TransactionID
+	AccountID     AccountID
+	Amount        Amount
+	CreatedAt     string
+}
+
+type LedgerEntryInput struct {
+	AccountID AccountID
+	Amount    Amount
+}

@@ -9,10 +9,10 @@ import (
 
 // A function to handle both depositing funds into the ledger-db
 // account as well as withdrawing funds from ledger-db into a
-// separate payment rail. 
+// separate payment rail.
 //
 // PostExternalTransfer requires the caller to tell in the direction
-// the money will move, and then it handles assigning the values 
+// the money will move, and then it handles assigning the values
 // and transferring money accordingly.
 func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTransferCommand) (TransactionID, error) {
 	if cmd.TransferAmount <= 0 {
@@ -124,8 +124,14 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	if err := insertLedgerEntries(ctx, tx, transactionID, cmd.TransferAmount, fromAccountID, toAccountID); err != nil {
-		return 0, err
+	entries := []LedgerEntryInput{
+		{AccountID: fromAccountID, Amount: -cmd.TransferAmount},
+		{AccountID: toAccountID, Amount: cmd.TransferAmount},
+	}
+	for _, entry := range entries {
+		if err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
+			return 0, err
+		}
 	}
 
 	err = verifyTransactionBalances(ctx, tx, transactionID)

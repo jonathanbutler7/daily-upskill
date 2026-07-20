@@ -146,7 +146,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	if err := insertExternalTransfers(
+	if err := insertExternalTransfer(
 		ctx,
 		tx,
 		cmd.ExternalTransferDirection,

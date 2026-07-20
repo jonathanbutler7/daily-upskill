@@ -270,7 +270,7 @@ func insertLedgerEntry(
 	return nil
 }
 
-func insertExternalTransfers(
+func insertExternalTransfer(
 	ctx context.Context,
 	tx *sql.Tx,
 	direction ExternalTransferDirection,

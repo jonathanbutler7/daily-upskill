@@ -175,6 +175,85 @@ func assertExternalTransfer(t *testing.T, ctx context.Context, db *sql.DB, exter
 	}
 }
 
+func assertLedgerReversal(t *testing.T, ctx context.Context, db *sql.DB, originalTransactionID ledgerstore.TransactionID, reversalTransactionID ledgerstore.TransactionID, reason ledgerstore.Reason) {
+	t.Helper()
+
+	var gotOriginalID int64
+	var gotReversalID int64
+	var gotReason string
+	err := db.QueryRowContext(ctx, `
+		select original_transaction_id, reversal_transaction_id, reason
+		from ledger_reversals
+		where original_transaction_id = $1;
+	`, originalTransactionID).Scan(&gotOriginalID, &gotReversalID, &gotReason)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ledgerstore.TransactionID(gotOriginalID) != originalTransactionID {
+		t.Fatalf("original_transaction_id = %d, want %d", gotOriginalID, originalTransactionID)
+	}
+	if ledgerstore.TransactionID(gotReversalID) != reversalTransactionID {
+		t.Fatalf("reversal_transaction_id = %d, want %d", gotReversalID, reversalTransactionID)
+	}
+	if ledgerstore.Reason(gotReason) != reason {
+		t.Fatalf("reason = %q, want %q", gotReason, reason)
+	}
+}
+
+func assertTransactionType(t *testing.T, ctx context.Context, db *sql.DB, transactionID ledgerstore.TransactionID, want ledgerstore.LedgerTransactionType) {
+	t.Helper()
+
+	var got string
+	err := db.QueryRowContext(ctx, `
+		select type
+		from ledger_transactions
+		where id = $1;
+	`, transactionID).Scan(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ledgerstore.LedgerTransactionType(got) != want {
+		t.Fatalf("transaction %d type = %q, want %q", transactionID, got, want)
+	}
+}
+
+func assertTransactionEntries(t *testing.T, ctx context.Context, db *sql.DB, transactionID ledgerstore.TransactionID, want map[ledgerstore.AccountID]int64) {
+	t.Helper()
+
+	rows, err := db.QueryContext(ctx, `
+		select account_id, amount
+		from ledger_entries
+		where transaction_id = $1
+		order by account_id;
+	`, transactionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var accountID int64
+		var amount int64
+		if err := rows.Scan(&accountID, &amount); err != nil {
+			t.Fatal(err)
+		}
+		wantAmount, ok := want[ledgerstore.AccountID(accountID)]
+		if !ok {
+			t.Fatalf("unexpected account_id %d for transaction %d", accountID, transactionID)
+		}
+		if amount != wantAmount {
+			t.Fatalf("transaction %d account %d amount = %d, want %d", transactionID, accountID, amount, wantAmount)
+		}
+		delete(want, ledgerstore.AccountID(accountID))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(want) > 0 {
+		t.Fatalf("missing entries for transaction %d: %v", transactionID, want)
+	}
+}
+
 func TestScenarioAliceSendsBob(t *testing.T) {
 	ctx, db := openIntegrationDB(t)
 	resetScenarioDB(t, ctx, db)
@@ -215,6 +294,125 @@ func TestScenarioAliceSendsBob(t *testing.T) {
 	})
 	assertRowCount(t, ctx, db, "ledger_transactions", 2)
 	assertRowCount(t, ctx, db, "ledger_entries", 4)
+}
+
+func TestScenarioReversalHappyPath(t *testing.T) {
+	ctx, db := openIntegrationDB(t)
+	resetScenarioDB(t, ctx, db)
+	accounts := seedAliceAndBob(t, ctx, db)
+
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-reversal-seed-ext",
+		IdempotencyKey:            "alice-reversal-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	transferID, err := PostTransfer(ctx, db, ledgerstore.TransferCommand{
+		FromAccountID:  accounts.alice,
+		ToAccountID:    accounts.bob,
+		Amount:         1000,
+		IdempotencyKey: "alice-sends-bob-before-reversal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transferTransactionID := ledgerstore.TransactionID(transferID)
+
+	reversalReason := ledgerstore.Reason("duplicate transfer")
+	reversalID, err := ledgerstore.ReverseTransaction(ctx, db, ledgerstore.ReversalCommand{
+		TransactionID:  transferTransactionID,
+		IdempotencyKey: "reverse-alice-sends-bob",
+		Reason:         reversalReason,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reversalID != 3 {
+		t.Fatalf("reversalID = %d, want 3", reversalID)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement": -2000,
+		"Alice":           2000,
+		"Bob":             0,
+	})
+	assertTransactionType(t, ctx, db, transferTransactionID, ledgerstore.LedgerTransactionTypeTransfer)
+	assertTransactionType(t, ctx, db, reversalID, ledgerstore.LedgerTransactionTypeReversal)
+	assertTransactionEntries(t, ctx, db, transferTransactionID, map[ledgerstore.AccountID]int64{
+		accounts.alice: -1000,
+		accounts.bob:   1000,
+	})
+	assertTransactionEntries(t, ctx, db, reversalID, map[ledgerstore.AccountID]int64{
+		accounts.alice: 1000,
+		accounts.bob:   -1000,
+	})
+	assertLedgerReversal(t, ctx, db, transferTransactionID, reversalID, reversalReason)
+	assertRowCount(t, ctx, db, "ledger_transactions", 3)
+	assertRowCount(t, ctx, db, "ledger_entries", 6)
+	assertRowCount(t, ctx, db, "ledger_reversals", 1)
+}
+
+func TestScenarioDoubleReversalFails(t *testing.T) {
+	ctx, db := openIntegrationDB(t)
+	resetScenarioDB(t, ctx, db)
+	accounts := seedAliceAndBob(t, ctx, db)
+
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "alice-double-reversal-seed-ext",
+		IdempotencyKey:            "alice-double-reversal-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	transferID, err := PostTransfer(ctx, db, ledgerstore.TransferCommand{
+		FromAccountID:  accounts.alice,
+		ToAccountID:    accounts.bob,
+		Amount:         1000,
+		IdempotencyKey: "alice-sends-bob-double-reversal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transferTransactionID := ledgerstore.TransactionID(transferID)
+
+	reversalID, err := ledgerstore.ReverseTransaction(ctx, db, ledgerstore.ReversalCommand{
+		TransactionID:  transferTransactionID,
+		IdempotencyKey: "reverse-double-reversal",
+		Reason:         "duplicate transfer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = ledgerstore.ReverseTransaction(ctx, db, ledgerstore.ReversalCommand{
+		TransactionID:  transferTransactionID,
+		IdempotencyKey: "reverse-double-reversal-again",
+		Reason:         "second reversal should fail",
+	})
+	if !errors.Is(err, ledgerstore.ErrReversalAlreadyExists) {
+		t.Fatalf("err = %v, want %v", err, ledgerstore.ErrReversalAlreadyExists)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement": -2000,
+		"Alice":           2000,
+		"Bob":             0,
+	})
+	assertLedgerReversal(t, ctx, db, transferTransactionID, reversalID, "duplicate transfer")
+	assertRowCount(t, ctx, db, "ledger_transactions", 3)
+	assertRowCount(t, ctx, db, "ledger_entries", 6)
+	assertRowCount(t, ctx, db, "ledger_reversals", 1)
 }
 
 func TestScenarioWithdrawal(t *testing.T) {

@@ -67,12 +67,12 @@ The project should make a deliberate choice about what belongs in Go and what be
 
 ## Reversal Requirements
 
-- [ ] A posted transaction can be reversed with a new transaction.
-- [ ] A reversal creates new entries instead of editing old entries.
-- [ ] The original transaction remains visible and unchanged.
-- [ ] A transaction cannot be reversed twice.
-- [ ] Reversal entries balance to zero.
-- [ ] Reversal behavior has a scenario file with expected output.
+- [x] A posted transaction can be reversed with a new transaction.
+- [x] A reversal creates new entries instead of editing old entries.
+- [x] The original transaction remains visible and unchanged.
+- [x] A transaction cannot be reversed twice.
+- [x] Reversal entries balance to zero.
+- [x] Reversal behavior has a DB-backed scenario test with expected output.
 
 ## Balance And Reconciliation Requirements
 
@@ -131,8 +131,8 @@ Each important rule should have a small SQL scenario that can be run through `ps
 - [x] Reusing an idempotency key with different request fields.
 - [x] Stored balance versus derived balance comparison.
 - [ ] Unbalanced transaction prevention.
-- [ ] Reversal happy path.
-- [ ] Double reversal failure.
+- [x] Reversal happy path.
+- [x] Double reversal failure.
 - [ ] Mutation protection for posted entries.
 - [ ] Mutation protection for posted transactions.
 
@@ -155,7 +155,7 @@ Each important rule should have a small SQL scenario that can be run through `ps
   - scenario test only
 - [ ] Link to the scenario that proves each implemented behavior.
 - [x] Explain the difference between stored balances and derived balances.
-- [ ] Explain why reversals are new transactions instead of edits.
+- [x] Explain why reversals are new transactions instead of edits.
 - [ ] Call out which shortcuts are learning shortcuts.
 - [ ] Call out which missing features would be required for production.
 

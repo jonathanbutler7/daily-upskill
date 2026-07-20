@@ -138,6 +138,8 @@ Think through:
 ```text
 What should the reversal reference?
 - the transaction it's reversing
+Why should a reversal be a new transaction?
+- the original transaction and entries are the audit record, so fixing a mistake should add a clear counter-event instead of rewriting what was posted
 How do I prevent double reversal?
 - idempotency keys for reversals
 What if Bob already spent the money?

@@ -9,6 +9,7 @@ import (
 	"log"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 			FromAccountID:  2,
 			ToAccountID:    3,
 			Amount:         11111111,
-			IdempotencyKey: "a-key-1123",
+			IdempotencyKey: ledgerstore.IdempotencyKey(uuid.NewString()),
 		})
 	if err != nil {
 		log.Fatal(err)
@@ -37,7 +38,7 @@ func main() {
 			TransferAmount:            1000,
 			Rail:                      "ach",
 			ExternalReference:         "external-id",
-			IdempotencyKey:            "a-key-113",
+			IdempotencyKey:            ledgerstore.IdempotencyKey(uuid.NewString()),
 			ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 		})
 	if err != nil {

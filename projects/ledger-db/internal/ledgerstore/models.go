@@ -31,7 +31,7 @@ type TransferCommand struct {
 	FromAccountID  AccountID
 	ToAccountID    AccountID
 	Amount         Amount
-	IdempotencyKey string
+	IdempotencyKey IdempotencyKey
 }
 
 type PostTransferCommand struct {

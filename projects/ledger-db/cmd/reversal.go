@@ -1,0 +1,5 @@
+package ledger
+
+func Reversal() {
+}
+

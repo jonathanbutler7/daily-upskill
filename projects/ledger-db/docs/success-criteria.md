@@ -6,9 +6,13 @@ This is still a learning project, but it should not be a toy ledger. By the end,
 
 ## Done Means
 
-The project is done when it can post, reject, reverse, and reconcile ledger activity through clear application and database boundaries, and when the docs explain which guarantees are implemented versus only recognized as production requirements.
+The project is done when it can post, reject, reverse, and expose enough durable ledger state for reconciliation through clear application and database boundaries, and when the docs explain which guarantees are implemented versus only recognized as production requirements.
 
 This project should be strong enough to talk through as an industry-style ledger POC.
+
+## Reconciliation Scope Note
+
+External payment reconciliation is recognized here as a production requirement, but the full reconciliation workflow will be built in the separate `reconciliation-engine` project. `ledger-db` should expose enough durable accounting state, external transfer references, and reversal/true-up commands for that project to reconcile against. It does not need to own report ingestion, matching, exception queues, or reconciliation resolution workflow.
 
 ## Core Ledger Requirements
 
@@ -41,7 +45,6 @@ Money can enter or leave this ledger, but the ledger still has to stay balanced.
 - [x] A deposit posts balanced entries between the receiving user account and the internal funding or settlement account.
 - [x] A withdrawal posts balanced entries between the sending user account and the internal funding or settlement account.
 - [x] External payment identifiers should be stored separately from ledger entries.
-- [ ] External payment status should be reconciled against ledger activity.
 - [x] The docs explain the difference between an external real-world account and an internal ledger account that represents that external relationship.
 - [x] The docs explain whether deposits are posted only after settlement or first posted as pending/clearing activity.
 - [x] The project has a scenario showing money entering the ledger from an external source.
@@ -84,8 +87,6 @@ The project should make a deliberate choice about what belongs in Go and what be
 - [ ] There is a true-up or repair plan, even if it is manual for this project.
 - [ ] The project names which transaction states count toward derived balances.
 - [x] External funding or deposit transactions can be tied back to an external reference.
-- [ ] The project can identify ledger deposits that do not have a matching external event.
-- [ ] The project can identify external events that were not posted to the ledger.
 
 ## Database Safety Requirements
 

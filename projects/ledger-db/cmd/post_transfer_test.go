@@ -58,7 +58,7 @@ func TestPostTransferRequestValidation(t *testing.T) {
 					FromAccountID:  ledgerstore.AccountID(tt.fromAccountID),
 					ToAccountID:    ledgerstore.AccountID(tt.toAccountID),
 					Amount:         ledgerstore.Amount(tt.amount),
-					IdempotencyKey: tt.idempotencyKey,
+					IdempotencyKey: ledgerstore.IdempotencyKey(tt.idempotencyKey),
 				},
 			)
 			if err == nil {

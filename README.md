@@ -21,6 +21,10 @@ daily-upskill/
 ├── projects/                      # Working code
 │   ├── payer-sync/               # Healthcare payment reconciliation
 │   ├── ledger-db/                # Double-entry ledger in Postgres
+│   ├── ideas/                    # Future payments product designs
+│   │   ├── wallet/               # Stored-value wallet product design
+│   │   ├── reconciliation-engine/ # Reconciles reports against ledger state
+│   │   └── rail-sim/             # Payment rail simulator design
 │   └── will-they-pay/            # ML payment propensity model
 │
 ├── knowledge/                     # Reference documentation
@@ -42,6 +46,12 @@ daily-upskill/
 
 Building payments domain expertise for Staff Engineer promotion. The goal is to become the engineer people pull into design conversations when money movement, correctness, or risk is involved.
 
+The current payments architecture work is split across separate products:
+
+- `ledger-db` owns durable double-entry accounting, balances, idempotency, reversals, and the ledger state needed by downstream systems.
+- `projects/ideas/reconciliation-engine` owns the design for external report ingestion, matching, exceptions, and reconciliation resolution workflow.
+- `projects/ideas/wallet` and `projects/ideas/rail-sim` sit on either side of the ledger: wallet as the user-facing stored-value product, and rail-sim as a future external payment rail simulator.
+
 See `knowledge/career-path/` for the full plan.
 
 ## How I Learn
@@ -54,4 +64,4 @@ See `knowledge/career-path/` for the full plan.
 ---
 
 **Started**: March 2026  
-**Current track**: Payments fundamentals, ledger correctness, reconciliation, reliability
+**Current track**: Payments fundamentals, ledger correctness, reconciliation systems, reliability

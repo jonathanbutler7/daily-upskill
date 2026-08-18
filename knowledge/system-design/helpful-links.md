@@ -6,6 +6,7 @@
 - https://github.com/ashishps1/awesome-system-design-resources?tab=readme-ov-file
 - https://paperdraw.dev/
 - https://www.youtube.com/shorts/Ibf7wKf8MqU
+- https://www.moderntreasury.com/ebooks/how-to-scale-a-ledger#concurrency-controls-performance-and-more
 
 System design interviews often start with the choice about CAP theorem.
 But the real decision is a lot simpler than you would think.

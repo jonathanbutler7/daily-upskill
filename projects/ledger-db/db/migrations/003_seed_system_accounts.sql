@@ -1,4 +1,4 @@
-insert into ledger_accounts (name, description, currency_code, balance)
+insert into ledger_accounts (name, description, currency_code, available_balance)
 select
     'Cash Settlement',
     'Internal account used to balance settled external money movement',

@@ -21,8 +21,8 @@ create table ledger_transactions (
     status text not null check(status in ('pending', 'posted', 'archived')),
     idempotency_key text not null unique,
     created_at timestamptz not null default now(),
-    posted_at timestamptz not null default now(),
-    archived_at timestamptz not null default now(),
+    posted_at timestamptz,
+    archived_at timestamptz,
     from_account_id bigint not null references ledger_accounts(id),
     to_account_id bigint not null references ledger_accounts(id),
     amount bigint not null check (amount > 0),
@@ -35,6 +35,7 @@ create table ledger_entries (
     account_id bigint not null references ledger_accounts(id),
     amount bigint not null check (amount <> 0),
     archived boolean not null default false,
+    archived_at timestamptz,
     created_at timestamptz not null default now()
 );
 

@@ -6,11 +6,10 @@ Ledger database uses double entry bookkeeping to provide an immutable, fully aud
 
 - Handling transfer logic in a database transaction means no orphan transactions or entries are ever created
 - Each transaction must balance to zero
-- Each account balance must match the sum of all of the account's entries
+- Each account balance type must match the sum of all of the account's entries (see balance definitions below)
 - System accounts allow for double entry bookkeeping to include external transfers
 - Idempotency keys prevent retries from causing duplicates
 - entries and transactions tables are immutable once they are posted
-- Pending transactions update pending and available account balances
 - Pending withdrawal reduces `available_balance`, but pending deposit does not increase `available_balance` until posted.
 
 ## Transaction lifecycles
@@ -26,10 +25,10 @@ Transaction state transitions
 Balance definitions
 1. posted balance: sum(posted entries)
 2. pending balance: sum(posted entries + pending entries)
-3. available balance: posted balance + pending outbound entires
+3. available balance: posted balance + pending outbound entries
 
 System boundaries
-Ledger supports transaction states, but does not have asynchronous management. It expects the caller to handle state transitions
+Ledger supports transaction states, but does not have asynchronous management. It expects the caller to initiate state transitions and decide when they should occur. The ledger validates the transition and performs the operation atomically.
 
 ## Transfers
 
@@ -106,8 +105,8 @@ Each ledger operation is wrapped in a single database transaction, to ensure dat
 
 The following tables are immutable so that the ledger db is fully auditable at any state. 
 
-- `ledger_entries`
-- `ledger_transactions`
+- `ledger_entries` - only updatable field is `archived` and `archived_at`
+- `ledger_transactions` - updatable until status is `posted`
 
 `update` and `delete` are prevented at the postgres level for each row.
 

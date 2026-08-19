@@ -2,7 +2,40 @@
 
 Ledger database uses double entry bookkeeping to provide an immutable, fully auditable system of record that tracks transfers of funds.
 
+## Invariants
+
+- Handling transfer logic in a database transaction means no orphan transactions or entries are ever created
+- Each transaction must balance to zero
+- Each account balance must match the sum of all of the account's entries
+- System accounts allow for double entry bookkeeping to include external transfers
+- Idempotency keys prevent retries from causing duplicates
+- entries and transactions tables are immutable once they are posted
+- Pending transactions update pending and available account balances
+- Pending withdrawal reduces `available_balance`, but pending deposit does not increase `available_balance` until posted.
+
 ## Transaction lifecycles
+
+### Pending, posted, and available balances
+
+Transaction state transitions
+
+1. pending -> posted
+2. pending -> archived
+3. posted -> reversed by new transaction
+
+Balance definitions
+1. posted balance: sum(posted entries)
+2. pending balance: sum(posted entries + pending entries)
+3. available balance: posted balance + pending outbound entires
+
+System boundaries
+Ledger supports transaction states, but does not have asynchronous management. It expects the caller to handle state transitions
+
+## Transfers
+
+After a successful transfer, ledger db will return the transactionID of the newly created transaction. 
+
+After a failed transfer, ledger db returns a typed error so the caller knows how to proceed.
 
 ### Internal transfers
 
@@ -56,17 +89,16 @@ Transfers that contain invalid requests or fail at the db layer return typed err
 ### Ledger operations
 
 1. `PostExternalTransfer` 
-   1. handles external depositing and withdrawing of funds
+   1. handles depositing and withdrawing of funds between to/from accounts
 2. `PostTransfer`
-   1. handles internal transfers between 2 accounts
+   1. handles internal transfers between two ledger accounts
 3. `Reversal`
    1. JTBD
+4. Update
 
 ### Atomicity
 
 Each ledger operation is wrapped in a single database transaction, to ensure data correctness and prevent write conflicts. If any step of the operation fails, it will be rolled back as a single transaction, and an error will be returned.
-
-### Invariants
 
 ### Concurrency
 
@@ -83,7 +115,7 @@ The implication is that the tables are append-only.
 
 ### Data Correctness
 
-At an interval, ledger db will run a job that verifies all entries transaction pair balances to zero and compare3s stored account balances to balances derived from entries.
+At an interval, ledger db will run a job that verifies all entries transaction pair balances to zero and compares stored account balances to balances derived from entries.
 
 Example: JBTD
 

@@ -28,5 +28,5 @@ $$;
 
 create trigger ledger_transactions_no_update
 before update or delete on ledger_transactions
-for each row
+for each row WHEN(status = 'posted')
 execute function prevent_ledger_transaction_mutation()

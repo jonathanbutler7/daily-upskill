@@ -14,18 +14,31 @@ Ledger database uses double entry bookkeeping to provide an immutable, fully aud
 
 ## Transaction lifecycles
 
-### Pending, posted, and available balances
-
 Transaction state transitions
 
 1. pending -> posted
 2. pending -> archived
 3. posted -> reversed by new transaction
 
+### Pending, posted, and available balances
+
 Balance definitions
 1. posted balance: sum(posted entries)
+   1. What has actually posted to the ledger?
 2. pending balance: sum(posted entries + pending entries)
+   1. What would the balance be if pending activity completes?
 3. available balance: posted balance + pending outbound entries
+   1. How much can this account spend or withdraw right now?
+
+Example: 
+
+posted_balance = 100
+pending withdrawal = -30
+pending deposit = +50
+
+posted_balance = 100
+pending_balance = 120   // 100 - 30 + 50
+available_balance = 70  // 100 - 30
 
 System boundaries
 Ledger supports transaction states, but does not have asynchronous management. It expects the caller to initiate state transitions and decide when they should occur. The ledger validates the transition and performs the operation atomically.
@@ -73,11 +86,13 @@ transfer of funds from user account -> Cash settlement
 
 transfer of funds from Cash settlement -> user account
 
-Currently deposits use the same function as withdrawals, so the steps are the same as above.
+Currently deposits use the same function as withdrawals but with the direction reversed, so the steps are the same as above.
 
 ### Reversals
 
-JTBD
+When a transaction is reversed, it is recorded in the `ledger_reversals` table and the transaction and entries are left unchanged. Reversal entries are created to reverse the original transaction entries.
+
+Transactions can only be reversed once.
 
 ### Error handling and failed transfers
 
@@ -108,9 +123,9 @@ The following tables are immutable so that the ledger db is fully auditable at a
 - `ledger_entries` - only updatable field is `archived` and `archived_at`
 - `ledger_transactions` - updatable until status is `posted`
 
-`update` and `delete` are prevented at the postgres level for each row.
+Row deletion prevented by postgres. 
 
-The implication is that the tables are append-only.
+Soft delete (`archived_at`) allowed for entries and transactions tables.
 
 ### Data Correctness
 
@@ -140,7 +155,7 @@ A future state of this project will add currency conversion.
 ### Balance types
 
 - pending
-- settled
+- posted
 - available
 
 ### Transaction types

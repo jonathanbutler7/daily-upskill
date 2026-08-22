@@ -57,11 +57,11 @@ begin
     select id
     into existing_transaction_id
     from ledger_transactions lt
-    where lt.idempotency_key = add_balance.idempotency_key
+    where lt.idempotency_key = deposit_funds.idempotency_key
         and lt.type = 'deposit'
         and lt.from_account_id = funding_account_id
-        and lt.to_account_id = add_balance.to_account_id
-        and lt.amount = add_balance.transfer_amount
+        and lt.to_account_id = deposit_funds.to_account_id
+        and lt.amount = deposit_funds.transfer_amount
         and lt.currency_code = to_currency;
 
     if existing_transaction_id is not null then
@@ -72,7 +72,7 @@ begin
     select id
     into existing_transaction_id
     from ledger_transactions lt
-    where lt.idempotency_key = add_balance.idempotency_key;
+    where lt.idempotency_key = deposit_funds.idempotency_key;
 
     if existing_transaction_id is not null then
         raise exception 'idempotency key reused with different request';

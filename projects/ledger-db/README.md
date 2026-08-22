@@ -43,7 +43,10 @@ psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
   -f projects/ledger-db/db/migrations/004_create_post_transfer_function.sql
 
 psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/005_create_add_balance_function.sql
+  -f projects/ledger-db/db/migrations/005_create_deposit_funds_function.sql
+
+psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
+  -f projects/ledger-db/db/migrations/006_prevent_entry_mutations.sql
 ```
 
 ```sql
@@ -62,7 +65,7 @@ psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
 Or call the function manually inside `psql`:
 
 ```sql
-select add_balance(2, 2000, 'ach', 'manual-deposit-ext-1', 'manual-deposit-1');
+select deposit_funds(2, 2000, 'ach', 'manual-deposit-ext-1', 'manual-deposit-1');
 select post_transfer(2, 3, 1000, 'test-1');
 
 select * from ledger_accounts;

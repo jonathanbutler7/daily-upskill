@@ -8,7 +8,7 @@ values
     ('Alice', 'Alice wallet', 'USD', 0),
     ('Bob', 'Bob wallet', 'USD', 0);
 
-select add_balance(2, 2000, 'ach', 'seed-alice-2000-ext', 'seed-alice-2000') as deposit_transaction_id;
+select deposit_funds(2, 2000, 'ach', 'seed-alice-2000-ext', 'seed-alice-2000') as deposit_transaction_id;
 select post_transfer(2, 3, 1000, 'alice-sends-bob-1000') as transfer_transaction_id;
 
 select id, name, currency_code, balance

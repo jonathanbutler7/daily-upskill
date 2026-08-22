@@ -8,7 +8,7 @@ values
     ('Alice', 'Alice Wallet', 'USD', 0),
     ('Bob', 'Bob Wallet', 'USD', 0);
 
-select add_balance(2, 2000, 'ach', 'alice-idempotency-seed-ext', 'alice-idempotency-seed') as deposit_transaction_id;
+select deposit_funds(2, 2000, 'ach', 'alice-idempotency-seed-ext', 'alice-idempotency-seed') as deposit_transaction_id;
 select post_transfer(2, 3, 1000, 'same-request') as first_transaction_id;
 select post_transfer(2, 3, 1000, 'same-request') as second_transaction_id;
 

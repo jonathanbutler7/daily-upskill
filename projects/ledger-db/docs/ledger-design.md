@@ -22,13 +22,16 @@ Transaction state transitions
 
 ### Pending, posted, and available balances
 
+(Future enhancement based on https://docs.moderntreasury.com/platform/reference/ledger-balances-object)
+
 Balance definitions
-1. posted balance: sum(posted entries)
-   1. What has actually posted to the ledger?
-2. pending balance: sum(posted entries + pending entries)
-   1. What would the balance be if pending activity completes?
+
+1. pending balance: sum(pending entries + posted entries)
+   1. The sum of all pending AND posted entry amounts.
+2. posted balance: sum(posted entries)
+   1. The sum of all posted entry amounts.
 3. available balance: posted balance + pending outbound entries
-   1. How much can this account spend or withdraw right now?
+   1. The sum of all posted entries and pending outbound entries, where direction is determined by the normality of the object holding the balance. See below for more details.
 
 Example: 
 

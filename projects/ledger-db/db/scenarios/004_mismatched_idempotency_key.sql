@@ -8,7 +8,7 @@ values
     ('Alice', 'Alice Wallet', 'USD', 0),
     ('Bob', 'Bob Wallet', 'USD', 0);
 
-select add_balance(2, 5000, 'ach', 'alice-mismatch-seed-ext', 'alice-mismatch-seed') as deposit_transaction_id;
+select deposit_funds(2, 5000, 'ach', 'alice-mismatch-seed-ext', 'alice-mismatch-seed') as deposit_transaction_id;
 select post_transfer(2, 3, 1000, 'same-key') as first_transaction_id;
 select post_transfer(2, 3, 2000, 'same-key') as mismatched_request;
 

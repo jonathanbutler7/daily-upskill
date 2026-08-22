@@ -9,19 +9,17 @@ create table ledger_accounts (
     name text not null,
     description text not null,
     currency_code char(3) not null,
-    available_balance bigint not null default 0,
-    pending_balance bigint not null default 0,
-    posted_balance bigint not null default 0,
+    balance bigint not null default 0,
     created_at timestamptz not null default now()
 );
 
 create table ledger_transactions (
     id bigserial primary key,
     type text not null check(type in ('transfer', 'deposit', 'withdrawal', 'reversal')),
-    status text not null check(status in ('pending', 'posted', 'archived')),
+    status text not null default 'posted' check(status in ('pending', 'posted', 'archived')),
     idempotency_key text not null unique,
     created_at timestamptz not null default now(),
-    posted_at timestamptz,
+    posted_at timestamptz not null default now(),
     archived_at timestamptz,
     from_account_id bigint not null references ledger_accounts(id),
     to_account_id bigint not null references ledger_accounts(id),

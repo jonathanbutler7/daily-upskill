@@ -25,7 +25,7 @@ Connect as the app role:
 psql "postgresql://ledger_db:password@localhost:5432/ledger_db"
 ```
 
-## Run migrations
+## Run schema migrations
 
 Run these from the repo root:
 
@@ -40,13 +40,21 @@ psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
   -f projects/ledger-db/db/migrations/003_seed_system_accounts.sql
 
 psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
+  -f projects/ledger-db/db/migrations/006_prevent_entry_mutations.sql
+```
+
+The active application path posts through Go with `database/sql` transactions.
+Postgres owns durable storage, constraints, uniqueness, foreign keys, row locks,
+and transaction atomicity.
+
+The older PL/pgSQL posting functions are kept for the local SQL scenarios:
+
+```bash
+psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
   -f projects/ledger-db/db/migrations/004_create_post_transfer_function.sql
 
 psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
   -f projects/ledger-db/db/migrations/005_create_deposit_funds_function.sql
-
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/006_prevent_entry_mutations.sql
 ```
 
 ```sql
@@ -92,7 +100,8 @@ GOCACHE=/private/tmp/ledger-db-go-build-cache go test ./...
 ```
 
 The SQL scenarios also have Go integration-test versions. They reset the local
-ledger tables, so run them only against a throwaway local database:
+ledger tables and apply the immutability migration, so run them only against a
+throwaway local database:
 
 ```bash
 LEDGER_DB_INTEGRATION=1 GOCACHE=/private/tmp/ledger-db-go-build-cache go test ./cmd

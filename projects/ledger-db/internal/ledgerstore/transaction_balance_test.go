@@ -4,14 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"ledger-db/internal/testdb"
 )
-
-const defaultIntegrationTestDSN = "postgresql://ledger_db:password@localhost:5432/ledger_db"
 
 func TestVerifyTransactionBalances(t *testing.T) {
 	tests := []struct {
@@ -54,50 +50,12 @@ func TestVerifyTransactionBalances(t *testing.T) {
 
 func openLedgerstoreIntegrationDB(t *testing.T) (context.Context, *sql.DB) {
 	t.Helper()
-
-	if os.Getenv("LEDGER_DB_INTEGRATION") != "1" {
-		t.Skip("set LEDGER_DB_INTEGRATION=1 to run DB-backed ledgerstore tests")
-	}
-
-	dsn := os.Getenv("LEDGER_DB_DSN")
-	if dsn == "" {
-		dsn = defaultIntegrationTestDSN
-	}
-
-	ctx := context.Background()
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := db.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	return ctx, db
+	return testdb.OpenIntegrationDB(t)
 }
 
 func resetLedgerstoreIntegrationDB(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
-
-	for _, migration := range []string{
-		"001_create_ledger_tables.sql",
-		"002_create_external_transfers.sql",
-		"003_seed_system_accounts.sql",
-	} {
-		sqlText, err := os.ReadFile(filepath.Join("..", "..", "db", "migrations", migration))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(ctx, string(sqlText)); err != nil {
-			t.Fatalf("%s: %v", migration, err)
-		}
-	}
+	testdb.ResetIntegrationDB(t, ctx, db)
 }
 
 func insertBalanceTestTransaction(t *testing.T, ctx context.Context, tx *sql.Tx) TransactionID {

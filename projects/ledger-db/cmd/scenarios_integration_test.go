@@ -4,18 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"ledger-db/internal/ledgerstore"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"ledger-db/internal/testdb"
 )
 
 // These tests are Go versions of the original SQL scenarios in db/scenarios.
-const defaultTestDSN = "postgresql://ledger_db:password@localhost:5432/ledger_db"
-
 type scenarioAccounts struct {
 	cashSettlement int64
 	alice          ledgerstore.AccountID
@@ -24,50 +19,12 @@ type scenarioAccounts struct {
 
 func openIntegrationDB(t *testing.T) (context.Context, *sql.DB) {
 	t.Helper()
-
-	if os.Getenv("LEDGER_DB_INTEGRATION") != "1" {
-		t.Skip("set LEDGER_DB_INTEGRATION=1 to run DB-backed scenario tests")
-	}
-
-	dsn := os.Getenv("LEDGER_DB_DSN")
-	if dsn == "" {
-		dsn = defaultTestDSN
-	}
-
-	ctx := context.Background()
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := db.Close(); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	return ctx, db
+	return testdb.OpenIntegrationDB(t)
 }
 
 func resetScenarioDB(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
-
-	for _, migration := range []string{
-		"001_create_ledger_tables.sql",
-		"002_create_external_transfers.sql",
-		"003_seed_system_accounts.sql",
-	} {
-		sqlText, err := os.ReadFile(filepath.Join("..", "db", "migrations", migration))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(ctx, string(sqlText)); err != nil {
-			t.Fatalf("%s: %v", migration, err)
-		}
-	}
+	testdb.ResetIntegrationDB(t, ctx, db)
 }
 
 func seedAliceAndBob(t *testing.T, ctx context.Context, db *sql.DB) scenarioAccounts {

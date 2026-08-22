@@ -4,6 +4,9 @@ These files are small scripts for checking how the Postgres functions behave.
 
 They are not migrations or production scripts. They are meant to be run against a local throwaway database while building the ledger.
 
+Before running these scenarios, load the schema migrations and the legacy
+PL/pgSQL function migrations from the root README.
+
 Each scenario starts with:
 
 ```sql

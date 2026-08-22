@@ -20,9 +20,9 @@ The repo has evolved into three things:
 daily-upskill/
 ├── projects/                      # Working code
 │   ├── payer-sync/               # Healthcare payment reconciliation
-│   ├── ledger-db/                # Double-entry ledger in Postgres
+│   ├── ledger-db/                # Go/Postgres double-entry ledger
+│   ├── wallet/                   # Stored-value wallet product design
 │   ├── ideas/                    # Future payments product designs
-│   │   ├── wallet/               # Stored-value wallet product design
 │   │   ├── reconciliation-engine/ # Reconciles reports against ledger state
 │   │   └── rail-sim/             # Payment rail simulator design
 │   └── will-they-pay/            # ML payment propensity model
@@ -34,12 +34,15 @@ daily-upskill/
 │   └── career-path/              # Staff → Director roadmap
 │
 ├── learning/                      # Original learning materials
-│   ├── exercises/                # Python exercises (mostly done)
 │   ├── ROADMAP.md                # Learning progression
-│   └── SKILLS_TRACKER.md         # Project log
+│   ├── SKILLS_TRACKER.md         # Project log
+│   └── director-feedback-brief.md # Career conversation notes
 │
 └── archive/                       # Deprecated content
-    └── old-stuff/                # Early experiments
+    ├── exercises/                # Early Python and ML exercises
+    ├── concepts/                 # Archived concept notes
+    ├── quizzes/                  # Archived quizzes
+    └── skills/                   # Archived skill notes
 ```
 
 ## Current Focus
@@ -48,9 +51,12 @@ Building payments domain expertise for Staff Engineer promotion. The goal is to 
 
 The current payments architecture work is split across separate products:
 
-- `ledger-db` owns durable double-entry accounting, balances, idempotency, reversals, and the ledger state needed by downstream systems.
+- `projects/payer-sync` is the completed healthcare payment reconciliation prototype.
+- `projects/ledger-db` owns durable double-entry accounting, balances, idempotency, external transfers, reversals, and the ledger state needed by downstream systems.
+- `projects/wallet` is the planned user-facing stored-value product that will sit in front of the ledger.
 - `projects/ideas/reconciliation-engine` owns the design for external report ingestion, matching, exceptions, and reconciliation resolution workflow.
-- `projects/ideas/wallet` and `projects/ideas/rail-sim` sit on either side of the ledger: wallet as the user-facing stored-value product, and rail-sim as a future external payment rail simulator.
+- `projects/ideas/rail-sim` is the future payment rail simulator.
+- `projects/will-they-pay` is a completed ML payment propensity case study, not the main career track.
 
 See `knowledge/career-path/` for the full plan.
 

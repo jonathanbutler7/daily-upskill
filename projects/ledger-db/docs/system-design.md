@@ -131,8 +131,6 @@ Soft delete (`archived_at`) allowed for entries and transactions tables.
 
 At an interval, ledger db will run a job that verifies all entries transaction pair balances to zero and compares stored account balances to balances derived from entries.
 
-Example: JBTD
-
 ### Serialization at scale
 
 The cash settlement account, for example, could become hot because it is a single account that all external transfers will need to get a row lock on.

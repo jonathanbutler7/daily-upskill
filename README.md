@@ -47,7 +47,7 @@ daily-upskill/
 
 ## Current Focus
 
-Building payments domain expertise for Staff Engineer promotion. The goal is to become the engineer people pull into design conversations when money movement, correctness, or risk is involved.
+Building payments domain expertise for Staff Engineer promotion.
 
 The current payments architecture work is split across separate products:
 

@@ -42,6 +42,7 @@ func PostExternalTransfer(
 		db,
 		ledgerstore.PostExternalTransferCommand{
 			UserAccountID:             ledgerstore.AccountID(cmd.UserAccountID),
+			SettlementAccountID:       ledgerstore.AccountID(cmd.SettlementAccountID),
 			TransferAmount:            ledgerstore.Amount(cmd.TransferAmount),
 			Rail:                      ledgerstore.PaymentRail(cmd.Rail),
 			ExternalReference:         ledgerstore.ExternalReference(cmd.ExternalReference),

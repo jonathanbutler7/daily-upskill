@@ -40,7 +40,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	cashSettlementAccountId, err := lockCashSettlementAccountForUpdate(ctx, tx, toAccountCurrency)
+	cashSettlementAccountId, err := lockSettlementAccountForUpdate(ctx, tx, cmd.SettlementAccountID, toAccountCurrency)
 	if err != nil {
 		return 0, err
 	}

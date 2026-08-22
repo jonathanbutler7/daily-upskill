@@ -253,6 +253,46 @@ func TestScenarioAliceSendsBob(t *testing.T) {
 	assertRowCount(t, ctx, db, "ledger_entries", 4)
 }
 
+func TestPostExternalTransferCanUseCustomSettlementAccount(t *testing.T) {
+	ctx, db := openIntegrationDB(t)
+	resetScenarioDB(t, ctx, db)
+	accounts := seedAliceAndBob(t, ctx, db)
+
+	var settlementBucket ledgerstore.AccountID
+	err := db.QueryRowContext(ctx, `
+		insert into ledger_accounts (name, description, currency_code, balance)
+		values ('Cash Settlement ACH 00', 'ACH bucket', 'USD', 0)
+		returning id;
+	`).Scan(&settlementBucket)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	depositID, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		SettlementAccountID:       settlementBucket,
+		TransferAmount:            500,
+		Rail:                      "ach",
+		ExternalReference:         "bucketed-alice-500-ext",
+		IdempotencyKey:            "bucketed-alice-500",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement":        0,
+		"Alice":                  500,
+		"Bob":                    0,
+		"Cash Settlement ACH 00": -500,
+	})
+	assertTransactionEntries(t, ctx, db, depositID, map[ledgerstore.AccountID]int64{
+		settlementBucket: -500,
+		accounts.alice:   500,
+	})
+}
+
 func TestScenarioReversalHappyPath(t *testing.T) {
 	ctx, db := openIntegrationDB(t)
 	resetScenarioDB(t, ctx, db)

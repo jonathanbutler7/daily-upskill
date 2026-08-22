@@ -105,6 +105,19 @@ curl http://localhost:8080/validation
 The endpoint returns `200 OK` when validation runs. Use the JSON
 `healthy` field to decide whether the ledger state passed the audit.
 
+## Run a local stress test
+
+The local stress runner resets the schema by default, seeds accounts, runs
+concurrent ledger operations with randomized worker pacing, prints a live
+terminal dashboard, and finishes with validator output.
+
+```bash
+go run ./cmd/stress -accounts=5 -workers=2 -operations=50 -think-min=50ms -think-max=250ms
+```
+
+See [stress test plan](docs/stress-test.md) for the runner shape and visibility
+fields.
+
 ## Run Go tests
 
 Run the normal test suite from this directory:

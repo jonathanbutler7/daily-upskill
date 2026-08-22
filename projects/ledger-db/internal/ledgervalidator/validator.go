@@ -105,6 +105,7 @@ func Validate(ctx context.Context, db *sql.DB, opts Options) (Result, error) {
 		SnapshotAt: snapshotAt,
 		Summary:    summary,
 		Checks:     make([]CheckResult, 0, len(checks)),
+		Issues:     make([]Issue, 0),
 	}
 
 	for _, check := range checks {

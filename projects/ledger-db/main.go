@@ -37,6 +37,7 @@ type postTransferRequest struct {
 
 type postExternalTransferRequest struct {
 	UserAccountID             int64  `json:"user_account_id"`
+	SettlementAccountID       int64  `json:"settlement_account_id"`
 	TransferAmount            int64  `json:"transfer_amount"`
 	Rail                      string `json:"rail"`
 	ExternalReference         string `json:"external_reference"`
@@ -134,6 +135,7 @@ func (s *server) handlePostExternalTransfer(w http.ResponseWriter, r *http.Reque
 
 	transactionID, err := cmd.PostExternalTransfer(r.Context(), s.db, ledgerstore.PostExternalTransferCommand{
 		UserAccountID:             ledgerstore.AccountID(req.UserAccountID),
+		SettlementAccountID:       ledgerstore.AccountID(req.SettlementAccountID),
 		TransferAmount:            ledgerstore.Amount(req.TransferAmount),
 		Rail:                      ledgerstore.PaymentRail(req.Rail),
 		ExternalReference:         ledgerstore.ExternalReference(req.ExternalReference),

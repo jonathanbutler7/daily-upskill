@@ -8,17 +8,12 @@ import (
 	"runtime"
 	"testing"
 
+	"ledger-db/internal/ledgerschema"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 const defaultIntegrationTestDSN = "postgresql://ledger_db:password@localhost:5432/ledger_db"
-
-var migrationFiles = []string{
-	"001_create_ledger_tables.sql",
-	"002_create_external_transfers.sql",
-	"003_seed_system_accounts.sql",
-	"006_prevent_entry_mutations.sql",
-}
 
 func OpenIntegrationDB(t testing.TB) (context.Context, *sql.DB) {
 	t.Helper()
@@ -53,14 +48,9 @@ func OpenIntegrationDB(t testing.TB) (context.Context, *sql.DB) {
 func ResetIntegrationDB(t testing.TB, ctx context.Context, db *sql.DB) {
 	t.Helper()
 
-	for _, migration := range migrationFiles {
-		sqlText, err := os.ReadFile(filepath.Join(moduleRoot(t), "db", "migrations", migration))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(ctx, string(sqlText)); err != nil {
-			t.Fatalf("%s: %v", migration, err)
-		}
+	err := ledgerschema.ApplyLocalSchema(ctx, db, filepath.Join(moduleRoot(t), "db", "migrations"))
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

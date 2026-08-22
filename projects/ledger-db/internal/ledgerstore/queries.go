@@ -223,6 +223,30 @@ func lockToAccountCurrencyForUpdate(
 }
 
 // Locate the internal settlement account
+func lockSettlementAccountForUpdate(
+	ctx context.Context,
+	tx *sql.Tx,
+	settlementAccountID AccountID,
+	currencyCode CurrencyCode,
+) (AccountID, error) {
+	if settlementAccountID == 0 {
+		return lockCashSettlementAccountForUpdate(ctx, tx, currencyCode)
+	}
+
+	_, settlementCurrency, err := lockAccountForUpdate(ctx, tx, settlementAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
+		return 0, ErrCashSettlementAccountNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if settlementCurrency != currencyCode {
+		return 0, ErrCurrencyMismatch
+	}
+
+	return settlementAccountID, nil
+}
+
 func lockCashSettlementAccountForUpdate(
 	ctx context.Context,
 	tx *sql.Tx,

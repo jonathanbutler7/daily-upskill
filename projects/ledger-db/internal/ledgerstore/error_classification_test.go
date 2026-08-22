@@ -1,6 +1,7 @@
 package ledgerstore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -165,6 +166,17 @@ func TestClassifyErrorPostgresSQLStates(t *testing.T) {
 			},
 		},
 		{
+			name: "too many connections is retryable",
+			err:  pgErr("53300", "sorry, too many clients already"),
+			want: LedgerErrorInfo{
+				Code:      LedgerErrorCodeDBTooManyConnections,
+				Category:  LedgerErrorCategoryDB,
+				Retryable: true,
+				Expected:  true,
+				Message:   "ERROR: sorry, too many clients already (SQLSTATE 53300)",
+			},
+		},
+		{
 			name: "connection failure is retryable",
 			err:  fmt.Errorf("commit: %w", pgErr("08006", "connection failure")),
 			want: LedgerErrorInfo{
@@ -183,6 +195,34 @@ func TestClassifyErrorPostgresSQLStates(t *testing.T) {
 				t.Fatalf("ClassifyError() = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestClassifyErrorPostgresSQLStateInConnectionMessage(t *testing.T) {
+	err := errors.New("failed to connect: FATAL: remaining connection slots are reserved for non-replication superuser connections (SQLSTATE 53300)")
+	want := LedgerErrorInfo{
+		Code:      LedgerErrorCodeDBTooManyConnections,
+		Category:  LedgerErrorCategoryDB,
+		Retryable: true,
+		Expected:  true,
+		Message:   err.Error(),
+	}
+	if got := ClassifyError(err); got != want {
+		t.Fatalf("ClassifyError() = %#v, want %#v", got, want)
+	}
+}
+
+func TestClassifyErrorContextDeadlineExceeded(t *testing.T) {
+	err := fmt.Errorf("post transfer: %w", context.DeadlineExceeded)
+	want := LedgerErrorInfo{
+		Code:      LedgerErrorCodeDBUnavailable,
+		Category:  LedgerErrorCategoryDB,
+		Retryable: true,
+		Expected:  true,
+		Message:   "post transfer: context deadline exceeded",
+	}
+	if got := ClassifyError(err); got != want {
+		t.Fatalf("ClassifyError() = %#v, want %#v", got, want)
 	}
 }
 

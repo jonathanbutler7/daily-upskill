@@ -1,6 +1,10 @@
 package ledgerstore
 
-import "errors"
+import (
+	"context"
+	"errors"
+	"strings"
+)
 
 type LedgerErrorCode string
 
@@ -33,6 +37,7 @@ const (
 	LedgerErrorCodeDBCheckViolation       LedgerErrorCode = "db.check_violation"
 	LedgerErrorCodeDBSerializationFailure LedgerErrorCode = "db.serialization_failure"
 	LedgerErrorCodeDBDeadlock             LedgerErrorCode = "db.deadlock"
+	LedgerErrorCodeDBTooManyConnections   LedgerErrorCode = "db.too_many_connections"
 	LedgerErrorCodeDBUnavailable          LedgerErrorCode = "db.unavailable"
 
 	LedgerErrorCodeInternalUnknown LedgerErrorCode = "internal.unknown"
@@ -110,6 +115,12 @@ func ClassifyError(err error) LedgerErrorInfo {
 	if info, ok := classifyPostgresError(err, message); ok {
 		return info
 	}
+	if info, ok := classifyPostgresErrorMessage(message); ok {
+		return info
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return dbErrorInfo(LedgerErrorCodeDBUnavailable, true, true, message)
+	}
 
 	return LedgerErrorInfo{
 		Code:     LedgerErrorCodeInternalUnknown,
@@ -137,11 +148,20 @@ func classifyPostgresError(err error, message string) (LedgerErrorInfo, bool) {
 		return dbErrorInfo(LedgerErrorCodeDBSerializationFailure, true, true, message), true
 	case "40P01":
 		return dbErrorInfo(LedgerErrorCodeDBDeadlock, true, true, message), true
+	case "53300":
+		return dbErrorInfo(LedgerErrorCodeDBTooManyConnections, true, true, message), true
 	case "08006":
 		return dbErrorInfo(LedgerErrorCodeDBUnavailable, true, false, message), true
 	default:
 		return LedgerErrorInfo{}, false
 	}
+}
+
+func classifyPostgresErrorMessage(message string) (LedgerErrorInfo, bool) {
+	if strings.Contains(message, "SQLSTATE 53300") {
+		return dbErrorInfo(LedgerErrorCodeDBTooManyConnections, true, true, message), true
+	}
+	return LedgerErrorInfo{}, false
 }
 
 func dbErrorInfo(code LedgerErrorCode, retryable bool, expected bool, message string) LedgerErrorInfo {

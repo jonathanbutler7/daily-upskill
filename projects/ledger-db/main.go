@@ -8,6 +8,7 @@ import (
 	"io"
 	cmd "ledger-db/cmd"
 	"ledger-db/internal/ledgerstore"
+	"ledger-db/internal/ledgervalidator"
 	"log"
 	"net/http"
 	"os"
@@ -101,6 +102,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/transfers", requireMethod(http.MethodPost, s.handlePostTransfer))
 	mux.HandleFunc("/external-transfers", requireMethod(http.MethodPost, s.handlePostExternalTransfer))
 	mux.HandleFunc("/reversals", requireMethod(http.MethodPost, s.handleReversal))
+	mux.HandleFunc("/validation", requireMethod(http.MethodGet, s.handleValidation))
 	return mux
 }
 
@@ -163,6 +165,16 @@ func (s *server) handleReversal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, commandResponse{TransactionID: transactionID})
+}
+
+func (s *server) handleValidation(w http.ResponseWriter, r *http.Request) {
+	result, err := ledgervalidator.Validate(r.Context(), s.db, ledgervalidator.Options{})
+	if err != nil {
+		writeLedgerError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, dst any) bool {

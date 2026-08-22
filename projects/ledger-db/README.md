@@ -91,6 +91,20 @@ What this has proved so far:
 - Reusing the same idempotency key with the same request returns the original transaction.
 - Reusing the same idempotency key with a different request fails.
 
+## Validate ledger state
+
+The read-only validator audits committed ledger state without calling the write
+path. It checks posted transaction balances, stored balances versus derived
+balances, transaction entry shape, external transfer links, reversals, and
+non-posted transaction rows.
+
+```bash
+curl http://localhost:8080/validation
+```
+
+The endpoint returns `200 OK` when validation runs. Use the JSON
+`healthy` field to decide whether the ledger state passed the audit.
+
 ## Run Go tests
 
 Run the normal test suite from this directory:

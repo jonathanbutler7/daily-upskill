@@ -8,7 +8,7 @@ go run ./cmd/stress
 
 Use `go run ./cmd/stress --help` for quick commands. Use
 `go run ./cmd/stress --help-full` for the grouped flag reference. This doc owns
-the longer examples, dashboard fields, JSON fields, and interpretation notes.
+the longer examples, dashboard fields, and interpretation notes.
 
 It resets the local ledger schema by default, creates stress accounts, seeds each
 account through posted external deposits, runs concurrent workers, prints live
@@ -46,7 +46,7 @@ transfers use the single `Cash Settlement` account seeded by the migrations.
 The runner prints a live terminal dashboard by default:
 
 ```text
-LedgerDB Status  Health RUNNING  Run d17edc05  18:10:42  accounts=5 workers=2 ops=50
+LedgerDB Status  Health RUNNING  Run d17edc05  18:10:42  accounts=5 workers=2 ops=1000
 Local Postgres . USD ledger . randomized deposits, withdrawals, and wallet transfers
 
 Workload                                          Goroutines
@@ -63,7 +63,7 @@ Withdrawal [##----------------------] 5           Waited  0 pool waits avg=0.0ms
 Spread     accounts/worker=2.5 hot=off           Failed  pool_timeouts=0 server_rejects=0 lock=0
 
 Idempotency                                      Concurrency
-Requests  58 total for 50 logical ops            Workers  2 db_conns=6
+Requests  1008 total for 1000 logical ops        Workers  2 db_conns=6
 Duplicates 6 extra requests in 3 batches         Replays  6 same-transaction returns
 Conflicts  2 expected mismatched-key rejects      Unexpected [------------------] 0
 
@@ -91,37 +91,6 @@ The `#` bars use different scales by section:
 - `Goroutines` shows configured worker goroutines, current runtime goroutines, and non-worker goroutines.
 - `DB Pool` bars show usage against `-max-open-conns`.
 
-Use `-format=json` for newline-delimited JSON events:
-
-- `progress`: operation counts, success/failure counts, error counts,
-  throughput, retry attempts, database pool stats, and the latest in-run
-  validation result
-- `validation`: same shape as progress, emitted after optional in-run validation
-- `final`: final stats, database pool stats, and the full validator result
-
-Useful fields:
-
-- `stats.total`
-- `stats.success`
-- `stats.failure`
-- `stats.request_attempts`
-- `stats.duplicate_requests`
-- `stats.concurrent_duplicates`
-- `stats.idempotent_replays`
-- `stats.idempotency_conflicts`
-- `stats.idempotency_unexpected`
-- `stats.ops_per_second`
-- `stats.max_lock_waiters`
-- `stats.by_operation`
-- `stats.by_error_code`
-- `stats.by_error_category`
-- `db_stats.wait_count`
-- `db_stats.wait_duration_ms`
-- `summary.performance.grade`
-- `summary.performance.pool_wait_per_op_ms`
-- `summary.final_validation.healthy`
-- `summary.final_validation.summary.issue_count`
-
 ## Example Commands
 
 Small smoke run:
@@ -135,7 +104,7 @@ go run ./cmd/stress \
   -think-max=250ms
 ```
 
-Larger local run with periodic validation:
+Larger local run:
 
 ```bash
 go run ./cmd/stress \
@@ -143,16 +112,15 @@ go run ./cmd/stress \
   -workers=20 \
   -operations=5000 \
   -think-min=25ms \
-  -think-max=500ms \
-  -validation-interval=5s
+  -think-max=500ms
 ```
 
 The runner defaults `-max-open-conns` to `min(workers + 4, 50)`. That keeps a
 large worker count from exhausting a local Postgres instance. Increase it only
 when the database is configured to accept more connections.
 
-The default `-operation-timeout` is `30s` so large local runs can wait behind the
-database pool and row locks without producing misleading timeout failures.
+The CLI uses fixed defaults for seed balance, amount size, operation timeout,
+reset behavior, and output format.
 
 Hot-account transfer run:
 
@@ -211,16 +179,6 @@ Compare `rps`, `pool_wait/op`, `pool_timeouts`, `server_rejects`, and
 high, the bottleneck is probably row contention or write duration rather than
 connection admission.
 
-JSON output for dashboards or scripts:
-
-```bash
-go run ./cmd/stress \
-  -accounts=25 \
-  -workers=10 \
-  -operations=1000 \
-  -format=json
-```
-
 The runner exits non-zero if final validation fails or if unexpected non-business
 errors occurred. Business errors such as insufficient funds are counted as
 operation failures but do not fail the run by themselves.
@@ -231,5 +189,5 @@ Add these only after the direct Go runner is useful:
 
 - HTTP runner: drives `/transfers`, `/external-transfers`, and `/validation` to
   include service serialization, JSON parsing, and HTTP timeout behavior.
-- External dashboard: reads progress JSON or polls `/validation` and renders
-  longer-running history outside the terminal.
+- External dashboard: polls `/validation` and renders longer-running history
+  outside the terminal.

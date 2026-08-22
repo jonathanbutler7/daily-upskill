@@ -23,6 +23,8 @@ func TestHelpShowsShortQuickStart(t *testing.T) {
 		"Smoke",
 		"Duplicate/idempotency",
 		"Most-used flags:",
+		"-operations",
+		"-max-open-conns",
 		"-duplicate-percent",
 		"Scoring:",
 		"Grades: A>=90, B>=80, C>=70, D>=60, F<60.",
@@ -37,9 +39,10 @@ func TestHelpShowsShortQuickStart(t *testing.T) {
 
 	for _, notWant := range []string{
 		"Core workload flags:",
-		"Database and reset flags:",
+		"Database flags:",
 		"Output and validation flags:",
 		"default=postgresql://ledger_db",
+		"-format",
 	} {
 		if strings.Contains(output, notWant) {
 			t.Fatalf("short help should not include %q:\n%s", notWant, output)
@@ -61,7 +64,7 @@ func TestFullHelpShowsGroupedFlags(t *testing.T) {
 		"Good starting point:",
 		"Heavier comparison runs:",
 		"Core workload flags:",
-		"Database and reset flags:",
+		"Database flags:",
 		"Concurrent request and idempotency flags:",
 		"-duplicate-percent",
 		"-help-full",
@@ -77,10 +80,52 @@ func TestFullHelpShowsGroupedFlags(t *testing.T) {
 		"Target C",
 		"Target D",
 		"Target F",
+		"-operations",
 		"go run ./cmd/stress -accounts=500 -workers=200 -operations=50000 -max-open-conns=10 -think-min=0s -think-max=0s -hot-accounts=2 -hot-transfer-percent=80",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("full help output missing %q:\n%s", want, output)
+		}
+	}
+
+	for _, notWant := range []string{
+		"-dsn",
+		"-migrations-dir",
+		"-reset",
+		"-operation-timeout",
+		"-validation-interval",
+		"-format",
+		"-seed-balance",
+		"-max-amount",
+	} {
+		if strings.Contains(output, notWant) {
+			t.Fatalf("full help should not include removed flag %q:\n%s", notWant, output)
+		}
+	}
+}
+
+func TestRemovedFlagsAreRejected(t *testing.T) {
+	removedFlags := []string{
+		"-dsn=postgresql://example",
+		"-migrations-dir=db/migrations",
+		"-reset=false",
+		"-operation-timeout=1s",
+		"-validation-interval=1s",
+		"-format=json",
+		"-seed-balance=100",
+		"-max-amount=10",
+	}
+
+	for _, removedFlag := range removedFlags {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		exitCode := run([]string{removedFlag}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Fatalf("run %s exit code = %d, want 2", removedFlag, exitCode)
+		}
+		if !strings.Contains(stderr.String(), "flag provided but not defined") {
+			t.Fatalf("run %s stderr missing undefined flag error:\n%s", removedFlag, stderr.String())
 		}
 	}
 }

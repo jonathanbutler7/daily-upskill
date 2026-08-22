@@ -24,7 +24,12 @@ type cliOptions struct {
 }
 
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
-	var options cliOptions
+	options := cliOptions{
+		config: ledgerstress.Config{
+			DSN:   os.Getenv("LEDGER_DB_DSN"),
+			Reset: true,
+		},
+	}
 	flags := newFlagSet(&options, stdout, stderr)
 
 	if err := flags.Parse(args); err != nil {
@@ -66,14 +71,9 @@ func newFlagSet(options *cliOptions, stdout io.Writer, stderr io.Writer) *flag.F
 	flags.BoolVar(&options.help, "help", false, "show this help")
 	flags.BoolVar(&options.help, "h", false, "show this help")
 	flags.BoolVar(&options.fullHelp, "help-full", false, "show all flags and longer examples")
-	flags.StringVar(&config.DSN, "dsn", envOrDefault("LEDGER_DB_DSN", ledgerstress.DefaultDSN), "Postgres DSN")
-	flags.StringVar(&config.MigrationsDir, "migrations-dir", "db/migrations", "directory containing local schema migrations")
-	flags.BoolVar(&config.Reset, "reset", true, "reset the local schema before running")
 	flags.IntVar(&config.Accounts, "accounts", 25, "number of stress wallet accounts to create")
 	flags.IntVar(&config.Workers, "workers", 10, "number of concurrent workers")
-	flags.IntVar(&config.Operations, "operations", 1000, "number of operations to attempt")
-	flags.Int64Var(&config.SeedBalance, "seed-balance", 100_000, "starting balance for each stress account")
-	flags.Int64Var(&config.MaxAmount, "max-amount", 100, "maximum amount per operation")
+	flags.IntVar(&config.Operations, "operations", 1000, "number of logical ledger operations to attempt")
 	flags.IntVar(&config.MaxRetries, "max-retries", 3, "max retries for retryable database errors")
 	flags.IntVar(&config.MaxOpenConns, "max-open-conns", 0, "database max open connections; 0 means min(workers + 4, 50)")
 	flags.IntVar(&config.HotAccounts, "hot-accounts", 0, "number of seeded accounts to treat as hot transfer accounts; 0 disables hot-account mode")
@@ -81,12 +81,9 @@ func newFlagSet(options *cliOptions, stdout io.Writer, stderr io.Writer) *flag.F
 	flags.IntVar(&config.DuplicatePercent, "duplicate-percent", 0, "percentage of logical operations that fan out concurrent duplicate requests")
 	flags.IntVar(&config.DuplicateFanout, "duplicate-fanout", 2, "number of same-key concurrent requests for duplicate operations")
 	flags.IntVar(&config.ConflictPercent, "conflict-percent", 0, "percentage of successful operations followed by an expected idempotency conflict")
-	flags.DurationVar(&config.OperationTimeout, "operation-timeout", 30*time.Second, "timeout for each ledger operation")
 	flags.DurationVar(&config.MinThinkTime, "think-min", 25*time.Millisecond, "minimum random pause between worker operations")
 	flags.DurationVar(&config.MaxThinkTime, "think-max", 250*time.Millisecond, "maximum random pause between worker operations")
 	flags.DurationVar(&config.ProgressInterval, "progress-interval", time.Second, "progress interval; set a negative duration like -1s to disable")
-	flags.DurationVar(&config.ValidationInterval, "validation-interval", 0, "optional in-run validation interval; disabled by default")
-	flags.StringVar(&config.OutputFormat, "format", ledgerstress.OutputFormatText, "output format: text or json")
 
 	return flags
 }
@@ -101,14 +98,12 @@ func writeHelp(output io.Writer) {
 	fmt.Fprintln(output, "    go run ./cmd/stress -accounts=5 -workers=2 -operations=50")
 	fmt.Fprintln(output, "  Duplicate/idempotency")
 	fmt.Fprintln(output, "    go run ./cmd/stress -accounts=25 -workers=20 -operations=1000 -duplicate-percent=10 -duplicate-fanout=3 -conflict-percent=2")
-	fmt.Fprintln(output, "  JSON")
-	fmt.Fprintln(output, "    go run ./cmd/stress -format=json")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Most-used flags:")
-	fmt.Fprintln(output, "  -accounts, -workers, -operations")
+	fmt.Fprintln(output, "  -accounts, -workers, -operations, -max-open-conns")
 	fmt.Fprintln(output, "  -duplicate-percent, -duplicate-fanout, -conflict-percent")
 	fmt.Fprintln(output, "  -hot-accounts, -hot-transfer-percent")
-	fmt.Fprintln(output, "  -format=json, -validation-interval=5s")
+	fmt.Fprintln(output, "  -think-min, -think-max, -progress-interval")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Scoring:")
 	fmt.Fprintln(output, "  Score starts at 100. Grades: A>=90, B>=80, C>=70, D>=60, F<60.")
@@ -141,27 +136,18 @@ func writeFullHelp(output io.Writer, flags *flag.FlagSet) {
 	fmt.Fprintln(output, "  Duplicate request and idempotency check")
 	fmt.Fprintln(output, "    go run ./cmd/stress -accounts=25 -workers=20 -operations=1000 -duplicate-percent=10 -duplicate-fanout=3 -conflict-percent=2")
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "  JSON stream for scripts")
-	fmt.Fprintln(output, "    go run ./cmd/stress -format=json")
-	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Core workload flags:")
 	printFlagGroup(output, flags, []string{
 		"accounts",
 		"workers",
 		"operations",
-		"seed-balance",
-		"max-amount",
 		"think-min",
 		"think-max",
 	})
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Database and reset flags:")
+	fmt.Fprintln(output, "Database flags:")
 	printFlagGroup(output, flags, []string{
-		"dsn",
-		"migrations-dir",
-		"reset",
 		"max-open-conns",
-		"operation-timeout",
 		"max-retries",
 	})
 	fmt.Fprintln(output)
@@ -183,8 +169,6 @@ func writeFullHelp(output io.Writer, flags *flag.FlagSet) {
 	fmt.Fprintln(output, "Output and validation flags:")
 	printFlagGroup(output, flags, []string{
 		"progress-interval",
-		"validation-interval",
-		"format",
 		"help",
 		"h",
 		"help-full",
@@ -243,12 +227,4 @@ func printFlagGroup(output io.Writer, flags *flag.FlagSet, names []string) {
 		}
 		fmt.Fprintf(output, "  -%-22s default=%-18s %s\n", flagValue.Name, flagValue.DefValue, flagValue.Usage)
 	}
-}
-
-func envOrDefault(key string, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-	return value
 }

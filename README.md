@@ -18,31 +18,31 @@ The repo has evolved into three things:
 
 ```
 daily-upskill/
-├── projects/                      # Working code
-│   ├── payer-sync/               # Healthcare payment reconciliation
-│   ├── ledger-db/                # Go/Postgres double-entry ledger
-│   ├── wallet/                   # Stored-value wallet product design
-│   ├── ideas/                    # Future payments product designs
-│   │   ├── reconciliation-engine/ # Reconciles reports against ledger state
-│   │   └── rail-sim/             # Payment rail simulator design
-│   └── will-they-pay/            # ML payment propensity model
+├── projects/                       # Working code
+│   ├── payer-sync/                 # Healthcare payment reconciliation
+│   ├── ledger-db/                  # Go/Postgres double-entry ledger
+│   ├── wallet/                     # Stored-value wallet product design
+│   ├── ideas/                      # Future payments product designs
+│   │   ├── reconciliation-engine/  # Reconciles reports against ledger state
+│   │   └── rail-sim/               # Payment rail simulator design
+│   └── will-they-pay/              # ML payment propensity model
 │
-├── knowledge/                     # Reference documentation
-│   ├── payments-fundamentals/    # Core payments concepts
-│   ├── system-fundamentals/      # Production infrastructure
-│   ├── system-design/            # Design patterns
-│   └── career-path/              # Staff → Director roadmap
+├── knowledge/                      # Reference documentation
+│   ├── payments-fundamentals/      # Core payments concepts
+│   ├── system-fundamentals/        # Production infrastructure
+│   ├── system-design/              # Design patterns
+│   └── career-path/                # Staff → Director roadmap
 │
-├── learning/                      # Original learning materials
-│   ├── ROADMAP.md                # Learning progression
-│   ├── SKILLS_TRACKER.md         # Project log
-│   └── director-feedback-brief.md # Career conversation notes
+├── learning/                       # Original learning materials
+│   ├── ROADMAP.md                  # Learning progression
+│   ├── SKILLS_TRACKER.md           # Project log
+│   └── director-feedback-brief.md  # Career conversation notes
 │
-└── archive/                       # Deprecated content
-    ├── exercises/                # Early Python and ML exercises
-    ├── concepts/                 # Archived concept notes
-    ├── quizzes/                  # Archived quizzes
-    └── skills/                   # Archived skill notes
+└── archive/                        # Deprecated content
+    ├── exercises/                  # Early Python and ML exercises
+    ├── concepts/                   # Archived concept notes
+    ├── quizzes/                    # Archived quizzes
+    └── skills/                     # Archived skill notes
 ```
 
 ## Current Focus

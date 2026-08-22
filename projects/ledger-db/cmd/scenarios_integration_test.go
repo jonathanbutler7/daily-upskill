@@ -325,7 +325,7 @@ func TestScenarioReversalHappyPath(t *testing.T) {
 	transferTransactionID := ledgerstore.TransactionID(transferID)
 
 	reversalReason := ledgerstore.Reason("duplicate transfer")
-	reversalID, err := ledgerstore.ReverseTransaction(ctx, db, ledgerstore.ReversalCommand{
+	reversalIntID, err := Reversal(ctx, db, ledgerstore.ReversalCommand{
 		TransactionID:  transferTransactionID,
 		IdempotencyKey: "reverse-alice-sends-bob",
 		Reason:         reversalReason,
@@ -333,6 +333,7 @@ func TestScenarioReversalHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reversalID := ledgerstore.TransactionID(reversalIntID)
 	if reversalID != 3 {
 		t.Fatalf("reversalID = %d, want 3", reversalID)
 	}
@@ -386,7 +387,7 @@ func TestScenarioDoubleReversalFails(t *testing.T) {
 	}
 	transferTransactionID := ledgerstore.TransactionID(transferID)
 
-	reversalID, err := ledgerstore.ReverseTransaction(ctx, db, ledgerstore.ReversalCommand{
+	reversalIntID, err := Reversal(ctx, db, ledgerstore.ReversalCommand{
 		TransactionID:  transferTransactionID,
 		IdempotencyKey: "reverse-double-reversal",
 		Reason:         "duplicate transfer",
@@ -394,8 +395,9 @@ func TestScenarioDoubleReversalFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reversalID := ledgerstore.TransactionID(reversalIntID)
 
-	_, err = ledgerstore.ReverseTransaction(ctx, db, ledgerstore.ReversalCommand{
+	_, err = Reversal(ctx, db, ledgerstore.ReversalCommand{
 		TransactionID:  transferTransactionID,
 		IdempotencyKey: "reverse-double-reversal-again",
 		Reason:         "second reversal should fail",

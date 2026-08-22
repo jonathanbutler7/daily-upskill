@@ -22,4 +22,5 @@ var (
 	ErrTransactionIDRequired         = errors.New("transaction id is required")
 	ErrTransactionNotBalanced        = errors.New("transaction is not balanced")
 	ErrTransferAmountRequired        = errors.New("transfer amount is required")
+	ErrReasonIsRequired              = errors.New("refund is required")
 )

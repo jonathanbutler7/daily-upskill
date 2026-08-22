@@ -55,14 +55,57 @@ type LedgerErrorInfo struct {
 	Message   string
 }
 
+type ledgerErrorInfoProvider interface {
+	ledgerErrorInfo() LedgerErrorInfo
+	ledgerErrorInfoWithMessage(message string) LedgerErrorInfo
+}
+
+type ledgerError struct {
+	Code      LedgerErrorCode
+	Category  string
+	Retryable bool
+	Expected  bool
+	Message   string
+}
+
+func (e *ledgerError) Error() string {
+	return e.Message
+}
+
+func (e *ledgerError) ledgerErrorInfo() LedgerErrorInfo {
+	return LedgerErrorInfo{
+		Code:      e.Code,
+		Category:  e.Category,
+		Retryable: e.Retryable,
+		Expected:  e.Expected,
+		Message:   e.Message,
+	}
+}
+
+func (e *ledgerError) ledgerErrorInfoWithMessage(message string) LedgerErrorInfo {
+	info := e.ledgerErrorInfo()
+	info.Message = message
+	return info
+}
+
+func newLedgerError(code LedgerErrorCode, category string, expected bool, message string) error {
+	return &ledgerError{
+		Code:     code,
+		Category: category,
+		Expected: expected,
+		Message:  message,
+	}
+}
+
 func ClassifyError(err error) LedgerErrorInfo {
 	if err == nil {
 		return LedgerErrorInfo{}
 	}
 
 	message := err.Error()
-	if info, ok := classifySentinelError(err, message); ok {
-		return info
+	var ledgerErr ledgerErrorInfoProvider
+	if errors.As(err, &ledgerErr) {
+		return ledgerErr.ledgerErrorInfoWithMessage(message)
 	}
 	if info, ok := classifyPostgresError(err, message); ok {
 		return info
@@ -73,54 +116,6 @@ func ClassifyError(err error) LedgerErrorInfo {
 		Category: LedgerErrorCategoryInternal,
 		Message:  message,
 	}
-}
-
-func classifySentinelError(err error, message string) (LedgerErrorInfo, bool) {
-	sentinelErrorMappings := []struct {
-		err       error
-		code      LedgerErrorCode
-		category  string
-		retryable bool
-		expected  bool
-	}{
-		{ErrAmountGreaterThanZero, LedgerErrorCodeValidationAmountRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrTransferAmountRequired, LedgerErrorCodeValidationAmountRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrFromAccountIDRequired, LedgerErrorCodeValidationAccountRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrToAccountIDRequired, LedgerErrorCodeValidationAccountRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrExternalReferenceEmpty, LedgerErrorCodeValidationExternalReferenceRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrExternalReferenceRequired, LedgerErrorCodeValidationExternalReferenceRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrRailValueRequired, LedgerErrorCodeValidationRailRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrIdempotencyKeyRequired, LedgerErrorCodeValidationIdempotencyKeyRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrTransactionIDRequired, LedgerErrorCodeValidationTransactionIDRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrReasonIsRequired, LedgerErrorCodeValidationReasonRequired, LedgerErrorCategoryValidation, false, true},
-		{ErrMustBeWithdrawalOrDeposit, LedgerErrorCodeValidationDirectionRequired, LedgerErrorCategoryValidation, false, true},
-
-		{ErrFromAccountNotFound, LedgerErrorCodeNotFoundFromAccount, LedgerErrorCategoryNotFound, false, true},
-		{ErrToAccountNotFound, LedgerErrorCodeNotFoundToAccount, LedgerErrorCategoryNotFound, false, true},
-		{ErrCashSettlementAccountNotFound, LedgerErrorCodeNotFoundCashSettlementAccount, LedgerErrorCategoryNotFound, false, true},
-		{ErrNoRowsFound, LedgerErrorCodeNotFoundTransaction, LedgerErrorCategoryNotFound, false, true},
-
-		{ErrInsufficientFunds, LedgerErrorCodeBusinessInsufficientFunds, LedgerErrorCategoryBusiness, false, true},
-		{ErrCurrencyMismatch, LedgerErrorCodeBusinessCurrencyMismatch, LedgerErrorCategoryBusiness, false, true},
-		{ErrIdempotencyConflict, LedgerErrorCodeBusinessIdempotencyConflict, LedgerErrorCategoryBusiness, false, true},
-		{ErrReversalAlreadyExists, LedgerErrorCodeBusinessReversalAlreadyExists, LedgerErrorCategoryBusiness, false, true},
-
-		{ErrTransactionNotBalanced, LedgerErrorCodeInvariantTransactionNotBalanced, LedgerErrorCategoryInvariant, false, false},
-	}
-
-	for _, mapping := range sentinelErrorMappings {
-		if errors.Is(err, mapping.err) {
-			return LedgerErrorInfo{
-				Code:      mapping.code,
-				Category:  mapping.category,
-				Retryable: mapping.retryable,
-				Expected:  mapping.expected,
-				Message:   message,
-			}, true
-		}
-	}
-
-	return LedgerErrorInfo{}, false
 }
 
 func classifyPostgresError(err error, message string) (LedgerErrorInfo, bool) {

@@ -8,7 +8,21 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func TestClassifyErrorSentinelErrors(t *testing.T) {
+func TestLedgerErrorsArePlainErrorsWithInfo(t *testing.T) {
+	var err error = ErrInsufficientFunds
+	info := ClassifyError(err)
+	want := LedgerErrorInfo{
+		Code:     LedgerErrorCodeBusinessInsufficientFunds,
+		Category: LedgerErrorCategoryBusiness,
+		Expected: true,
+		Message:  err.Error(),
+	}
+	if info != want {
+		t.Fatalf("ClassifyError() = %#v, want %#v", info, want)
+	}
+}
+
+func TestClassifyErrorLedgerErrors(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error

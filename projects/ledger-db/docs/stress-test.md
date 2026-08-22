@@ -6,8 +6,9 @@ The first stress-test runner is a local Go CLI:
 go run ./cmd/stress
 ```
 
-Use `go run ./cmd/stress --help` to see the run types, common examples, and all
-available flags grouped by purpose.
+Use `go run ./cmd/stress --help` for quick commands. Use
+`go run ./cmd/stress --help-full` for the grouped flag reference. This doc owns
+the longer examples, dashboard fields, JSON fields, and interpretation notes.
 
 It resets the local ledger schema by default, creates stress accounts, seeds each
 account through posted external deposits, runs concurrent workers, prints live
@@ -30,12 +31,15 @@ The current runner calls the Go command boundary directly. It exercises:
 - posted external withdrawals
 - wallet-to-wallet transfers
 - idempotency keys for every attempted operation
+- optional concurrent duplicate requests with the same idempotency key
+- optional mismatched-key requests that should return idempotency conflicts
 - retry behavior for retryable database errors
 - randomized operation mix, account choice, amount, and worker pacing
 - final committed-state validation through `internal/ledgervalidator`
 
 This runner is for write-path and database contention. It does not measure HTTP
-server overhead.
+server overhead, and it does not create alternate settlement accounts. External
+transfers use the single `Cash Settlement` account seeded by the migrations.
 
 ## Visibility
 
@@ -45,15 +49,23 @@ The runner prints a live terminal dashboard by default:
 LedgerDB Status  Health RUNNING  Run d17edc05  18:10:42  accounts=5 workers=2 ops=50
 Local Postgres . USD ledger . randomized deposits, withdrawals, and wallet transfers
 
-Workload                                          Latency
-Ops      [###########-----------------]  40.0%    Avg      [------------------]  3.89 ms
-OK       [###########-----------------]  20       P95      [------------------]  6.10 ms
-Failed   [----------------------------]  0        P99      [------------------] 10.30 ms
+Workload                                          Goroutines
+Ops      [###########-----------------]  40.0%    Workers  2 worker goroutines
+OK       [###########-----------------]  20       Runtime  8 goroutines now
+Failed   [----------------------------]  0        Other    6 non-worker goroutines
+RPS      [##################] 12.5/sec            Report   1 dashboard/validation
+Elapsed  4s retries=0                             DB cap   max_open_conns=6
 
 Operations                                        DB Pool
 Deposit    [###---------------------] 6           Held    [#######-------------] 2/6
 Transfer   [###################-----] 39          Active  [--------------------] 0 idle=2
-Withdrawal [##----------------------] 5           Queue   waits=0 avg=0.0ms/op=0.00 lock=0
+Withdrawal [##----------------------] 5           Waited  0 pool waits avg=0.0ms/op=0.00
+Spread     accounts/worker=2.5 hot=off           Failed  pool_timeouts=0 server_rejects=0 lock=0
+
+Idempotency                                      Concurrency
+Requests  58 total for 50 logical ops            Workers  2 db_conns=6
+Duplicates 6 extra requests in 3 batches         Replays  6 same-transaction returns
+Conflicts  2 expected mismatched-key rejects      Unexpected [------------------] 0
 
 Validation                                        Errors
 Final audit healthy                               No operation errors
@@ -68,13 +80,20 @@ Issues              0          0 clear
 
 Final
   grade:     A/95 (correct, fast, and stable)
-  signals:   rps=720.4 p95=6.10ms p99=10.30ms pool_wait/op=0.00ms lock_waiters_max=0
+  signals:   rps=720.4 worker_goroutines=2 runtime_goroutines=8 pool_wait/op=0.00ms pool_timeouts=0 server_rejects=0 lock_waiters_max=0
   mix:       deposit=6 transfer=39 withdrawal=5
+  idem:      requests=58 duplicate_extra=6 replays=6 conflicts=2 unexpected=0
 ```
+
+The `#` bars use different scales by section:
+
+- `Workload` bars show progress toward the requested operation count.
+- `Goroutines` shows configured worker goroutines, current runtime goroutines, and non-worker goroutines.
+- `DB Pool` bars show usage against `-max-open-conns`.
 
 Use `-format=json` for newline-delimited JSON events:
 
-- `progress`: operation counts, success/failure counts, error counts, latency,
+- `progress`: operation counts, success/failure counts, error counts,
   throughput, retry attempts, database pool stats, and the latest in-run
   validation result
 - `validation`: same shape as progress, emitted after optional in-run validation
@@ -85,10 +104,14 @@ Useful fields:
 - `stats.total`
 - `stats.success`
 - `stats.failure`
+- `stats.request_attempts`
+- `stats.duplicate_requests`
+- `stats.concurrent_duplicates`
+- `stats.idempotent_replays`
+- `stats.idempotency_conflicts`
+- `stats.idempotency_unexpected`
 - `stats.ops_per_second`
 - `stats.max_lock_waiters`
-- `stats.latency_ms.p95`
-- `stats.latency_ms.p99`
 - `stats.by_operation`
 - `stats.by_error_code`
 - `stats.by_error_category`
@@ -131,16 +154,6 @@ when the database is configured to accept more connections.
 The default `-operation-timeout` is `30s` so large local runs can wait behind the
 database pool and row locks without producing misleading timeout failures.
 
-Settlement bucket run:
-
-```bash
-go run ./cmd/stress \
-  -accounts=500 \
-  -workers=150 \
-  -operations=50000 \
-  -settlement-buckets=16
-```
-
 Hot-account transfer run:
 
 ```bash
@@ -152,11 +165,34 @@ go run ./cmd/stress \
   -hot-transfer-percent=20
 ```
 
-Use settlement buckets to test whether a single internal clearing row is driving
-tail latency. Use hot-account mode to test skewed wallet-to-wallet traffic.
-This command is intentionally rough: 20% of transfers hit only 5 wallet rows, so
-large P95/P99 values are expected if workers outpace the database pool or row
-locks.
+Use hot-account mode to test skewed wallet-to-wallet traffic. This command is
+intentionally rough: 20% of transfers hit only 5 wallet rows, so visible pool
+waits and lock waiters are expected if workers outpace the database. If the
+single settlement account becomes the bottleneck, the stress runner should
+surface that pressure rather than working around it.
+
+Concurrent duplicate request run:
+
+```bash
+go run ./cmd/stress \
+  -accounts=25 \
+  -workers=20 \
+  -operations=1000 \
+  -duplicate-percent=10 \
+  -duplicate-fanout=3 \
+  -conflict-percent=2
+```
+
+`-duplicate-percent` chooses how often a logical operation fans out same-key
+requests at the same time. `-duplicate-fanout=3` means one logical operation
+sends three concurrent requests with the same operation fields and idempotency
+key. The committed transaction count should still rise by one for that logical
+operation.
+
+`-conflict-percent` follows successful operations with a same-key request that
+changes the amount. Those requests should be rejected as idempotency conflicts.
+In a healthy run, `idempotent_replays` and `idempotency_conflicts` rise while
+`idempotency_unexpected` stays at zero.
 
 Pool comparison runs:
 
@@ -170,9 +206,10 @@ for conns in 25 50 75 100; do
 done
 ```
 
-Compare `rps`, `p95`, `p99`, `pool_wait/op`, and `lock_waiters_max`. If more
-connections reduce pool waits but not tail latency, the bottleneck is probably
-row contention or write duration rather than connection admission.
+Compare `rps`, `pool_wait/op`, `pool_timeouts`, `server_rejects`, and
+`lock_waiters_max`. If more connections reduce pool waits but lock waiters stay
+high, the bottleneck is probably row contention or write duration rather than
+connection admission.
 
 JSON output for dashboards or scripts:
 

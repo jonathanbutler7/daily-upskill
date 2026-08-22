@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -24,7 +25,6 @@ import (
 
 const DefaultDSN = "postgresql://ledger_db:password@localhost:5432/ledger_db"
 const defaultMaxOpenConns = 50
-const defaultSettlementBuckets = 1
 
 const (
 	OutputFormatText = "text"
@@ -42,9 +42,11 @@ type Config struct {
 	MaxAmount          int64
 	MaxRetries         int
 	MaxOpenConns       int
-	SettlementBuckets  int
 	HotAccounts        int
 	HotTransferPercent int
+	DuplicatePercent   int
+	DuplicateFanout    int
+	ConflictPercent    int
 	OperationTimeout   time.Duration
 	MinThinkTime       time.Duration
 	MaxThinkTime       time.Duration
@@ -69,37 +71,48 @@ type Summary struct {
 }
 
 type SummaryConfig struct {
-	Reset              bool  `json:"reset"`
-	Accounts           int   `json:"accounts"`
-	Workers            int   `json:"workers"`
-	Operations         int   `json:"operations"`
-	SeedBalance        int64 `json:"seed_balance"`
-	MaxAmount          int64 `json:"max_amount"`
-	MaxRetries         int   `json:"max_retries"`
-	MaxOpenConns       int   `json:"max_open_conns"`
-	SettlementBuckets  int   `json:"settlement_buckets"`
-	HotAccounts        int   `json:"hot_accounts"`
-	HotTransferPercent int   `json:"hot_transfer_percent"`
-	OperationTimeoutMS int64 `json:"operation_timeout_ms"`
-	MinThinkTimeMS     int64 `json:"min_think_time_ms"`
-	MaxThinkTimeMS     int64 `json:"max_think_time_ms"`
+	Reset                bool  `json:"reset"`
+	Accounts             int   `json:"accounts"`
+	Workers              int   `json:"workers"`
+	Operations           int   `json:"operations"`
+	SeedBalance          int64 `json:"seed_balance"`
+	MaxAmount            int64 `json:"max_amount"`
+	MaxRetries           int   `json:"max_retries"`
+	MaxOpenConns         int   `json:"max_open_conns"`
+	HotAccounts          int   `json:"hot_accounts"`
+	HotTransferPercent   int   `json:"hot_transfer_percent"`
+	DuplicatePercent     int   `json:"duplicate_percent"`
+	DuplicateFanout      int   `json:"duplicate_fanout"`
+	ConflictPercent      int   `json:"conflict_percent"`
+	OperationTimeoutMS   int64 `json:"operation_timeout_ms"`
+	MinThinkTimeMS       int64 `json:"min_think_time_ms"`
+	MaxThinkTimeMS       int64 `json:"max_think_time_ms"`
+	ValidationIntervalMS int64 `json:"validation_interval_ms"`
 }
 
 type StatsSnapshot struct {
-	ElapsedMS             int64            `json:"elapsed_ms"`
-	Total                 int64            `json:"total"`
-	Success               int64            `json:"success"`
-	Failure               int64            `json:"failure"`
-	RetryAttempts         int64            `json:"retry_attempts"`
-	OpsPerSecond          float64          `json:"ops_per_second"`
-	ByOperation           map[string]int64 `json:"by_operation"`
-	BySuccessfulOperation map[string]int64 `json:"by_successful_operation"`
-	MaxLockWaiters        int              `json:"max_lock_waiters"`
-	ByErrorCode           map[string]int64 `json:"by_error_code"`
-	ByErrorCategory       map[string]int64 `json:"by_error_category"`
-	ErrorSamples          []ErrorSample    `json:"error_samples,omitempty"`
-	LatencyMS             LatencySnapshot  `json:"latency_ms"`
-	LastValidation        *ValidationEvent `json:"last_validation,omitempty"`
+	ElapsedMS               int64            `json:"elapsed_ms"`
+	Total                   int64            `json:"total"`
+	Success                 int64            `json:"success"`
+	Failure                 int64            `json:"failure"`
+	RequestAttempts         int64            `json:"request_attempts"`
+	DuplicateRequests       int64            `json:"duplicate_requests"`
+	ConcurrentDuplicates    int64            `json:"concurrent_duplicates"`
+	IdempotentReplays       int64            `json:"idempotent_replays"`
+	IdempotencyConflicts    int64            `json:"idempotency_conflicts"`
+	IdempotencyUnexpected   int64            `json:"idempotency_unexpected"`
+	PoolTimeouts            int64            `json:"pool_timeouts"`
+	ServerConnectionRejects int64            `json:"server_connection_rejects"`
+	RetryAttempts           int64            `json:"retry_attempts"`
+	OpsPerSecond            float64          `json:"ops_per_second"`
+	ByOperation             map[string]int64 `json:"by_operation"`
+	BySuccessfulOperation   map[string]int64 `json:"by_successful_operation"`
+	MaxLockWaiters          int              `json:"max_lock_waiters"`
+	ByErrorCode             map[string]int64 `json:"by_error_code"`
+	ByErrorCategory         map[string]int64 `json:"by_error_category"`
+	ErrorSamples            []ErrorSample    `json:"error_samples,omitempty"`
+	LatencyMS               LatencySnapshot  `json:"latency_ms"`
+	LastValidation          *ValidationEvent `json:"last_validation,omitempty"`
 }
 
 type ErrorSample struct {
@@ -173,13 +186,28 @@ type finalEvent struct {
 }
 
 type workerContext struct {
-	runLabel           string
-	db                 *sql.DB
-	accounts           []ledgerstore.AccountID
-	settlementAccounts []ledgerstore.AccountID
-	config             Config
-	collector          *collector
-	sequence           *atomic.Int64
+	runLabel  string
+	db        *sql.DB
+	accounts  []ledgerstore.AccountID
+	config    Config
+	collector *collector
+	sequence  *atomic.Int64
+}
+
+type operationPlan struct {
+	operation      string
+	amount         ledgerstore.Amount
+	idempotencyKey ledgerstore.IdempotencyKey
+	externalRef    ledgerstore.ExternalReference
+	userAccountID  ledgerstore.AccountID
+	fromAccountID  ledgerstore.AccountID
+	toAccountID    ledgerstore.AccountID
+	externalDir    ledgerstore.ExternalTransferDirection
+}
+
+type requestResult struct {
+	transactionID ledgerstore.TransactionID
+	err           error
 }
 
 type fakeAccountProfile struct {
@@ -222,7 +250,7 @@ func Run(ctx context.Context, config Config) (Summary, error) {
 		}
 	}
 
-	accounts, settlementAccounts, err := seedAccounts(ctx, db, runLabel, config)
+	accounts, err := seedAccounts(ctx, db, runLabel, config)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -235,13 +263,12 @@ func Run(ctx context.Context, config Config) (Summary, error) {
 
 	var sequence atomic.Int64
 	workerCtx := workerContext{
-		runLabel:           runLabel,
-		db:                 db,
-		accounts:           accounts,
-		settlementAccounts: settlementAccounts,
-		config:             config,
-		collector:          collector,
-		sequence:           &sequence,
+		runLabel:  runLabel,
+		db:        db,
+		accounts:  accounts,
+		config:    config,
+		collector: collector,
+		sequence:  &sequence,
 	}
 
 	var next atomic.Int64
@@ -331,8 +358,8 @@ func withDefaults(config Config) Config {
 	if config.MaxOpenConns == 0 {
 		config.MaxOpenConns = min(config.Workers+4, defaultMaxOpenConns)
 	}
-	if config.SettlementBuckets == 0 {
-		config.SettlementBuckets = defaultSettlementBuckets
+	if config.DuplicateFanout == 0 {
+		config.DuplicateFanout = 2
 	}
 	if config.OperationTimeout == 0 {
 		config.OperationTimeout = 30 * time.Second
@@ -377,9 +404,6 @@ func validateConfig(config Config) error {
 	if config.MaxOpenConns < 1 {
 		return fmt.Errorf("max open conns must be at least 1")
 	}
-	if config.SettlementBuckets < 1 {
-		return fmt.Errorf("settlement buckets must be at least 1")
-	}
 	if config.HotAccounts < 0 {
 		return fmt.Errorf("hot accounts must not be negative")
 	}
@@ -391,6 +415,15 @@ func validateConfig(config Config) error {
 	}
 	if config.HotTransferPercent > 0 && config.HotAccounts < 2 {
 		return fmt.Errorf("hot transfer percent requires at least 2 hot accounts")
+	}
+	if config.DuplicatePercent < 0 || config.DuplicatePercent > 100 {
+		return fmt.Errorf("duplicate percent must be between 0 and 100")
+	}
+	if config.DuplicateFanout < 2 {
+		return fmt.Errorf("duplicate fanout must be at least 2")
+	}
+	if config.ConflictPercent < 0 || config.ConflictPercent > 100 {
+		return fmt.Errorf("conflict percent must be between 0 and 100")
 	}
 	if config.MinThinkTime < 0 {
 		return fmt.Errorf("min think time must not be negative")
@@ -404,7 +437,7 @@ func validateConfig(config Config) error {
 	return nil
 }
 
-func seedAccounts(ctx context.Context, db *sql.DB, runLabel string, config Config) ([]ledgerstore.AccountID, []ledgerstore.AccountID, error) {
+func seedAccounts(ctx context.Context, db *sql.DB, runLabel string, config Config) ([]ledgerstore.AccountID, error) {
 	accounts := make([]ledgerstore.AccountID, 0, config.Accounts)
 	for i := 1; i <= config.Accounts; i++ {
 		profile := fakeStressAccount(i)
@@ -418,21 +451,15 @@ func seedAccounts(ctx context.Context, db *sql.DB, runLabel string, config Confi
 			profile.Description,
 		).Scan(&accountID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("seed account %d: %w", i, err)
+			return nil, fmt.Errorf("seed account %d: %w", i, err)
 		}
 
 		accounts = append(accounts, ledgerstore.AccountID(accountID))
 	}
 
-	settlementAccounts, err := seedSettlementBuckets(ctx, db, config)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	for i, accountID := range accounts {
 		_, err := ledger.PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
 			UserAccountID:             accountID,
-			SettlementAccountID:       settlementAccountForIndex(settlementAccounts, i),
 			TransferAmount:            ledgerstore.Amount(config.SeedBalance),
 			Rail:                      ledgerstore.PaymentRail("ach"),
 			ExternalReference:         ledgerstore.ExternalReference(fakeExternalReference(runLabel, "seed", i+1, 0)),
@@ -440,36 +467,11 @@ func seedAccounts(ctx context.Context, db *sql.DB, runLabel string, config Confi
 			ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("seed account %d balance: %w", i+1, err)
+			return nil, fmt.Errorf("seed account %d balance: %w", i+1, err)
 		}
 	}
 
-	return accounts, settlementAccounts, nil
-}
-
-func seedSettlementBuckets(ctx context.Context, db *sql.DB, config Config) ([]ledgerstore.AccountID, error) {
-	if config.SettlementBuckets <= 1 {
-		return nil, nil
-	}
-
-	settlementAccounts := make([]ledgerstore.AccountID, 0, config.SettlementBuckets)
-	for i := 0; i < config.SettlementBuckets; i++ {
-		var accountID int64
-		err := db.QueryRowContext(ctx, `
-			insert into ledger_accounts (name, description, currency_code, balance)
-			values ($1, $2, 'USD', 0)
-			returning id;
-		`,
-			fmt.Sprintf("Cash Settlement ACH %02d", i),
-			"Internal stress settlement bucket for ACH write contention tests",
-		).Scan(&accountID)
-		if err != nil {
-			return nil, fmt.Errorf("seed settlement bucket %d: %w", i, err)
-		}
-		settlementAccounts = append(settlementAccounts, ledgerstore.AccountID(accountID))
-	}
-
-	return settlementAccounts, nil
+	return accounts, nil
 }
 
 func startProgressReporter(ctx context.Context, config Config, runID string, db *sql.DB, collector *collector, done <-chan struct{}, wg *sync.WaitGroup) {
@@ -586,74 +588,178 @@ func sleepThinkTime(ctx context.Context, random *rand.Rand, config Config) {
 }
 
 func runOperation(ctx context.Context, workerID int, operationNumber int, random *rand.Rand, workerCtx workerContext) {
-	operation := chooseOperation(random)
-	amount := ledgerstore.Amount(random.Int63n(workerCtx.config.MaxAmount) + 1)
 	sequence := workerCtx.sequence.Add(1)
-	idempotencyKey := ledgerstore.IdempotencyKey(fakeIdempotencyKey(workerCtx.runLabel, operation, workerID, operationNumber, sequence))
-	externalReference := ledgerstore.ExternalReference(fakeExternalReference(workerCtx.runLabel, operation, operationNumber, sequence))
+	plan := newOperationPlan(workerID, operationNumber, sequence, random, workerCtx)
+	fanout := 1
+	if workerCtx.config.DuplicatePercent > 0 && random.Intn(100) < workerCtx.config.DuplicatePercent {
+		fanout = workerCtx.config.DuplicateFanout
+	}
 
 	started := time.Now()
-	err := retry(workerCtx.config.MaxRetries, func() error {
-		opCtx, cancel := context.WithTimeout(ctx, workerCtx.config.OperationTimeout)
-		defer cancel()
+	err := runPlanRequests(ctx, plan, fanout, workerCtx)
+	if err == nil && workerCtx.config.ConflictPercent > 0 && random.Intn(100) < workerCtx.config.ConflictPercent {
+		err = runExpectedConflict(ctx, plan, workerCtx)
+	}
 
-		switch operation {
-		case "deposit":
-			to := randomAccount(random, workerCtx.accounts)
-			_, err := ledger.PostExternalTransfer(opCtx, workerCtx.db, ledgerstore.PostExternalTransferCommand{
-				UserAccountID:             to,
-				SettlementAccountID:       settlementAccountForIndex(workerCtx.settlementAccounts, int(sequence)),
-				TransferAmount:            amount,
-				Rail:                      ledgerstore.PaymentRail("ach"),
-				ExternalReference:         externalReference,
-				IdempotencyKey:            idempotencyKey,
-				ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
-			})
-			return err
-		case "withdrawal":
-			from := randomAccount(random, workerCtx.accounts)
-			_, err := ledger.PostExternalTransfer(opCtx, workerCtx.db, ledgerstore.PostExternalTransferCommand{
-				UserAccountID:             from,
-				SettlementAccountID:       settlementAccountForIndex(workerCtx.settlementAccounts, int(sequence)),
-				TransferAmount:            amount,
-				Rail:                      ledgerstore.PaymentRail("ach"),
-				ExternalReference:         externalReference,
-				IdempotencyKey:            idempotencyKey,
-				ExternalTransferDirection: ledgerstore.ExternalTransferDirectionWithdrawal,
-			})
-			return err
-		default:
-			from, to := randomAccountPair(random, workerCtx.accounts, workerCtx.config)
-			_, err := ledger.PostTransfer(opCtx, workerCtx.db, ledgerstore.TransferCommand{
-				FromAccountID:  from,
-				ToAccountID:    to,
-				Amount:         amount,
-				IdempotencyKey: idempotencyKey,
-			})
-			return err
-		}
-	}, workerCtx.collector)
-
-	workerCtx.collector.record(operation, time.Since(started), err)
+	workerCtx.collector.record(plan.operation, time.Since(started), err)
 }
 
-func retry(maxRetries int, fn func() error, collector *collector) error {
+func newOperationPlan(workerID int, operationNumber int, sequence int64, random *rand.Rand, workerCtx workerContext) operationPlan {
+	operation := chooseOperation(random)
+	amount := ledgerstore.Amount(random.Int63n(workerCtx.config.MaxAmount) + 1)
+	plan := operationPlan{
+		operation:      operation,
+		amount:         amount,
+		idempotencyKey: ledgerstore.IdempotencyKey(fakeIdempotencyKey(workerCtx.runLabel, operation, workerID, operationNumber, sequence)),
+		externalRef:    ledgerstore.ExternalReference(fakeExternalReference(workerCtx.runLabel, operation, operationNumber, sequence)),
+	}
+
+	switch operation {
+	case "deposit":
+		plan.userAccountID = randomAccount(random, workerCtx.accounts)
+		plan.externalDir = ledgerstore.ExternalTransferDirectionDeposit
+	case "withdrawal":
+		plan.userAccountID = randomAccount(random, workerCtx.accounts)
+		plan.externalDir = ledgerstore.ExternalTransferDirectionWithdrawal
+	default:
+		plan.fromAccountID, plan.toAccountID = randomAccountPair(random, workerCtx.accounts, workerCtx.config)
+	}
+
+	return plan
+}
+
+func runPlanRequests(ctx context.Context, plan operationPlan, fanout int, workerCtx workerContext) error {
+	if fanout < 1 {
+		fanout = 1
+	}
+	workerCtx.collector.recordRequestAttempts(int64(fanout))
+	if fanout == 1 {
+		_, err := runPlanRequest(ctx, plan, workerCtx)
+		return err
+	}
+
+	workerCtx.collector.recordConcurrentDuplicate(int64(fanout - 1))
+	results := make([]requestResult, fanout)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			results[index].transactionID, results[index].err = runPlanRequest(ctx, plan, workerCtx)
+		}(i)
+	}
+	wg.Wait()
+
+	return summarizeDuplicateResults(plan.operation, results, workerCtx.collector)
+}
+
+func runExpectedConflict(ctx context.Context, plan operationPlan, workerCtx workerContext) error {
+	workerCtx.collector.recordRequestAttempts(1)
+	conflictPlan := plan.withConflictingAmount()
+	_, err := runPlanRequest(ctx, conflictPlan, workerCtx)
+	if err == nil {
+		workerCtx.collector.recordUnexpectedIdempotency()
+		return fmt.Errorf("expected idempotency conflict for %s request", plan.operation)
+	}
+
+	info := ledgerstore.ClassifyError(err)
+	if info.Code == ledgerstore.LedgerErrorCodeBusinessIdempotencyConflict {
+		workerCtx.collector.recordIdempotencyConflict()
+		return nil
+	}
+
+	workerCtx.collector.recordUnexpectedIdempotency()
+	return err
+}
+
+func runPlanRequest(ctx context.Context, plan operationPlan, workerCtx workerContext) (ledgerstore.TransactionID, error) {
+	return retryTransaction(workerCtx.config.MaxRetries, func() (ledgerstore.TransactionID, error) {
+		opCtx, cancel := context.WithTimeout(ctx, workerCtx.config.OperationTimeout)
+		defer cancel()
+		return executePlan(opCtx, plan, workerCtx.db)
+	}, workerCtx.collector)
+}
+
+func executePlan(ctx context.Context, plan operationPlan, db *sql.DB) (ledgerstore.TransactionID, error) {
+	switch plan.operation {
+	case "deposit", "withdrawal":
+		return ledger.PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+			UserAccountID:             plan.userAccountID,
+			TransferAmount:            plan.amount,
+			Rail:                      ledgerstore.PaymentRail("ach"),
+			ExternalReference:         plan.externalRef,
+			IdempotencyKey:            plan.idempotencyKey,
+			ExternalTransferDirection: plan.externalDir,
+		})
+	default:
+		transactionID, err := ledger.PostTransfer(ctx, db, ledgerstore.TransferCommand{
+			FromAccountID:  plan.fromAccountID,
+			ToAccountID:    plan.toAccountID,
+			Amount:         plan.amount,
+			IdempotencyKey: plan.idempotencyKey,
+		})
+		return ledgerstore.TransactionID(transactionID), err
+	}
+}
+
+func summarizeDuplicateResults(operation string, results []requestResult, collector *collector) error {
+	var firstSuccess ledgerstore.TransactionID
+	successes := int64(0)
+	var firstErr error
+
+	for _, result := range results {
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+			}
+			continue
+		}
+		successes++
+		if firstSuccess == 0 {
+			firstSuccess = result.transactionID
+			continue
+		}
+		if result.transactionID != firstSuccess {
+			collector.recordUnexpectedIdempotency()
+			return fmt.Errorf("duplicate %s requests returned different transaction ids", operation)
+		}
+	}
+
+	if successes > 1 {
+		collector.recordIdempotentReplays(successes - 1)
+	}
+	return firstErr
+}
+
+func (p operationPlan) withConflictingAmount() operationPlan {
+	p.amount++
+	if p.amount <= 0 {
+		p.amount -= 2
+	}
+	if p.externalRef != "" {
+		p.externalRef += "-conflict"
+	}
+	return p
+}
+
+func retryTransaction(maxRetries int, fn func() (ledgerstore.TransactionID, error), collector *collector) (ledgerstore.TransactionID, error) {
 	var err error
+	var transactionID ledgerstore.TransactionID
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		err = fn()
+		transactionID, err = fn()
 		if err == nil {
-			return nil
+			return transactionID, nil
 		}
 		info := ledgerstore.ClassifyError(err)
 		if !info.Retryable {
-			return err
+			return 0, err
 		}
 		if attempt < maxRetries {
 			collector.recordRetry()
 			time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
 		}
 	}
-	return err
+	return 0, err
 }
 
 func chooseOperation(random *rand.Rand) string {
@@ -714,16 +820,6 @@ func fakeExternalReference(runLabel string, operation string, operationNumber in
 	return fmt.Sprintf("ach-%s-%s-%06d-%06d", operation, runLabel, operationNumber, sequence)
 }
 
-func settlementAccountForIndex(settlementAccounts []ledgerstore.AccountID, index int) ledgerstore.AccountID {
-	if len(settlementAccounts) == 0 {
-		return 0
-	}
-	if index < 0 {
-		index = -index
-	}
-	return settlementAccounts[index%len(settlementAccounts)]
-}
-
 func randomAccount(random *rand.Rand, accounts []ledgerstore.AccountID) ledgerstore.AccountID {
 	return accounts[random.Intn(len(accounts))]
 }
@@ -744,20 +840,23 @@ func randomAccountPair(random *rand.Rand, accounts []ledgerstore.AccountID, conf
 
 func summaryConfig(config Config) SummaryConfig {
 	return SummaryConfig{
-		Reset:              config.Reset,
-		Accounts:           config.Accounts,
-		Workers:            config.Workers,
-		Operations:         config.Operations,
-		SeedBalance:        config.SeedBalance,
-		MaxAmount:          config.MaxAmount,
-		MaxRetries:         config.MaxRetries,
-		MaxOpenConns:       config.MaxOpenConns,
-		SettlementBuckets:  config.SettlementBuckets,
-		HotAccounts:        config.HotAccounts,
-		HotTransferPercent: config.HotTransferPercent,
-		OperationTimeoutMS: config.OperationTimeout.Milliseconds(),
-		MinThinkTimeMS:     config.MinThinkTime.Milliseconds(),
-		MaxThinkTimeMS:     config.MaxThinkTime.Milliseconds(),
+		Reset:                config.Reset,
+		Accounts:             config.Accounts,
+		Workers:              config.Workers,
+		Operations:           config.Operations,
+		SeedBalance:          config.SeedBalance,
+		MaxAmount:            config.MaxAmount,
+		MaxRetries:           config.MaxRetries,
+		MaxOpenConns:         config.MaxOpenConns,
+		HotAccounts:          config.HotAccounts,
+		HotTransferPercent:   config.HotTransferPercent,
+		DuplicatePercent:     config.DuplicatePercent,
+		DuplicateFanout:      config.DuplicateFanout,
+		ConflictPercent:      config.ConflictPercent,
+		OperationTimeoutMS:   config.OperationTimeout.Milliseconds(),
+		MinThinkTimeMS:       config.MinThinkTime.Milliseconds(),
+		MaxThinkTimeMS:       config.MaxThinkTime.Milliseconds(),
+		ValidationIntervalMS: config.ValidationInterval.Milliseconds(),
 	}
 }
 
@@ -892,7 +991,7 @@ func performanceSummary(grade string, summary Summary) string {
 		return "operation failures observed"
 	}
 	if summary.Stats.LatencyMS.P99 >= 250 {
-		return "good throughput; tail latency needs attention"
+		return "good throughput; operation timing needs attention"
 	}
 	if waitPerOperationMS(summary.DBStats, summary.Stats.Total) >= 1 {
 		return "good throughput; pool queueing is visible"
@@ -1022,14 +1121,15 @@ func writeDashboard(output io.Writer, data dashboardData) {
 	fmt.Fprintln(output, dim("       |_____________|_______________|"))
 	fmt.Fprintln(output)
 
-	writeDashboardRow(output, sectionTitle("Workload"), sectionTitle("Latency"))
+	currentGoroutines := runtime.NumGoroutine()
+	writeDashboardRow(output, sectionTitle("Workload"), sectionTitle("Goroutines"))
 	writeDashboardRow(output,
 		fmt.Sprintf("Ops      %s %6.1f%%  %d/%d", bar(ratio(stats.Total, int64(data.Target)), 28, ansiGreen), ratio(stats.Total, int64(data.Target))*100, stats.Total, data.Target),
-		fmt.Sprintf("Avg      %s %8.2f ms", latencyBar(stats.LatencyMS.Avg, data.Config.OperationTimeoutMS), stats.LatencyMS.Avg),
+		workerGoroutineLine(data.Config),
 	)
 	writeDashboardRow(output,
 		fmt.Sprintf("OK       %s %d", bar(ratio(stats.Success, int64(data.Target)), 28, ansiGreen), stats.Success),
-		fmt.Sprintf("P50      %s %8.2f ms", latencyBar(stats.LatencyMS.P50, data.Config.OperationTimeoutMS), stats.LatencyMS.P50),
+		totalGoroutineLine(currentGoroutines),
 	)
 	failColor := ansiGreen
 	if stats.Failure > 0 {
@@ -1037,15 +1137,15 @@ func writeDashboard(output io.Writer, data dashboardData) {
 	}
 	writeDashboardRow(output,
 		fmt.Sprintf("Failed   %s %d", bar(ratio(stats.Failure, int64(data.Target)), 28, failColor), stats.Failure),
-		fmt.Sprintf("P95      %s %8.2f ms", latencyBar(stats.LatencyMS.P95, data.Config.OperationTimeoutMS), stats.LatencyMS.P95),
+		nonWorkerGoroutineLine(data.Config, currentGoroutines),
 	)
 	writeDashboardRow(output,
 		fmt.Sprintf("RPS      %-34s %.1f/sec", smallSpark(stats.OpsPerSecond, float64(max(data.Config.Workers, 1))*8), stats.OpsPerSecond),
-		fmt.Sprintf("P99      %s %8.2f ms", latencyBar(stats.LatencyMS.P99, data.Config.OperationTimeoutMS), stats.LatencyMS.P99),
+		progressGoroutineLine(data.Config),
 	)
 	writeDashboardRow(output,
 		fmt.Sprintf("Elapsed  %-34s retries=%d", formatDurationMS(stats.ElapsedMS), stats.RetryAttempts),
-		fmt.Sprintf("Max      %s %8.2f ms", latencyBar(stats.LatencyMS.Max, data.Config.OperationTimeoutMS), stats.LatencyMS.Max),
+		dbGoroutineLine(data.Config),
 	)
 	fmt.Fprintln(output)
 
@@ -1062,6 +1162,29 @@ func writeDashboard(output io.Writer, data dashboardData) {
 		fmt.Sprintf("Withdrawal %s %d", bar(operationRatio(stats, "withdrawal"), 24, ansiCyan), stats.ByOperation["withdrawal"]),
 		dbPoolLine(data.DBStats, data.Config, "waits"),
 	)
+	writeDashboardRow(output,
+		accountSpreadLine(data.Config),
+		connectionFailureLine(stats, data.DBStats),
+	)
+	fmt.Fprintln(output)
+
+	writeDashboardRow(output, sectionTitle("Idempotency"), sectionTitle("Concurrency"))
+	writeDashboardRow(output,
+		fmt.Sprintf("Requests  %d total for %d logical ops", stats.RequestAttempts, stats.Total),
+		fmt.Sprintf("Workers  %d db_conns=%d", data.Config.Workers, data.Config.MaxOpenConns),
+	)
+	writeDashboardRow(output,
+		fmt.Sprintf("Duplicates %d extra requests in %d batches", stats.DuplicateRequests, stats.ConcurrentDuplicates),
+		fmt.Sprintf("Replays  %d same-transaction returns", stats.IdempotentReplays),
+	)
+	conflictColor := ansiGreen
+	if stats.IdempotencyUnexpected > 0 {
+		conflictColor = ansiRed
+	}
+	writeDashboardRow(output,
+		fmt.Sprintf("Conflicts  %d expected mismatched-key rejects", stats.IdempotencyConflicts),
+		fmt.Sprintf("Unexpected %s %d", bar(ratio(stats.IdempotencyUnexpected, max64(stats.RequestAttempts, 1)), 18, conflictColor), stats.IdempotencyUnexpected),
+	)
 	fmt.Fprintln(output)
 
 	writeDashboardRow(output, sectionTitle("Validation"), sectionTitle("Errors"))
@@ -1077,15 +1200,24 @@ func writeDashboard(output io.Writer, data dashboardData) {
 		fmt.Fprintf(output, "%s\n", color(ansiPurple, ansiBold, "Final"))
 		if data.Performance.Grade != "" {
 			fmt.Fprintf(output, "  grade:     %s (%s)\n", performanceGradeText(data.Performance), data.Performance.Summary)
-			fmt.Fprintf(output, "  signals:   rps=%.1f p95=%.2fms p99=%.2fms pool_wait/op=%.2fms lock_waiters_max=%d\n",
+			fmt.Fprintf(output, "  signals:   rps=%.1f worker_goroutines=%d runtime_goroutines=%d pool_wait/op=%.2fms pool_timeouts=%d server_rejects=%d lock_waiters_max=%d\n",
 				data.Performance.ThroughputRPS,
-				data.Performance.P95MS,
-				data.Performance.P99MS,
+				data.Config.Workers,
+				runtime.NumGoroutine(),
 				data.Performance.PoolWaitPerOpMS,
+				stats.PoolTimeouts,
+				stats.ServerConnectionRejects,
 				data.Performance.MaxLockWaiters,
 			)
 		}
 		fmt.Fprintf(output, "  mix:       %s\n", formatCounts(stats.ByOperation))
+		fmt.Fprintf(output, "  idem:      requests=%d duplicate_extra=%d replays=%d conflicts=%d unexpected=%d\n",
+			stats.RequestAttempts,
+			stats.DuplicateRequests,
+			stats.IdempotentReplays,
+			stats.IdempotencyConflicts,
+			stats.IdempotencyUnexpected,
+		)
 		if len(stats.ByErrorCode) > 0 {
 			fmt.Fprintf(output, "  errors:    %s\n", formatCounts(stats.ByErrorCode))
 		}
@@ -1130,21 +1262,6 @@ func bar(value float64, width int, fillColor string) string {
 	return "[" + filledText + emptyText + "]"
 }
 
-func latencyBar(value float64, timeoutMS int64) string {
-	limit := float64(timeoutMS)
-	if limit <= 0 {
-		limit = 1000
-	}
-	colorCode := ansiGreen
-	used := value / limit
-	if used >= 0.80 {
-		colorCode = ansiRed
-	} else if used >= 0.50 {
-		colorCode = ansiYellow
-	}
-	return bar(used, 18, colorCode)
-}
-
 func smallSpark(value float64, ceiling float64) string {
 	if ceiling <= 0 {
 		ceiling = 1
@@ -1154,6 +1271,31 @@ func smallSpark(value float64, ceiling float64) string {
 
 func operationRatio(stats StatsSnapshot, operation string) float64 {
 	return ratio(stats.ByOperation[operation], max64(stats.Total, 1))
+}
+
+func workerGoroutineLine(config SummaryConfig) string {
+	return fmt.Sprintf("Workers  %d worker goroutines", config.Workers)
+}
+
+func totalGoroutineLine(total int) string {
+	return fmt.Sprintf("Runtime  %d goroutines now", total)
+}
+
+func nonWorkerGoroutineLine(config SummaryConfig, total int) string {
+	nonWorkers := max(total-config.Workers, 0)
+	return fmt.Sprintf("Other    %d non-worker goroutines", nonWorkers)
+}
+
+func progressGoroutineLine(config SummaryConfig) string {
+	extra := 1
+	if config.ValidationIntervalMS > 0 {
+		extra++
+	}
+	return fmt.Sprintf("Report   %d dashboard/validation", extra)
+}
+
+func dbGoroutineLine(config SummaryConfig) string {
+	return fmt.Sprintf("DB cap   max_open_conns=%d", config.MaxOpenConns)
 }
 
 func dbPoolLine(stats *DBStats, config SummaryConfig, row string) string {
@@ -1166,17 +1308,37 @@ func dbPoolLine(stats *DBStats, config SummaryConfig, row string) string {
 	case "in_use":
 		return fmt.Sprintf("Active  %s %d idle=%d", bar(ratio(int64(stats.InUse), int64(max(config.MaxOpenConns, 1))), 20, ansiYellow), stats.InUse, stats.Idle)
 	default:
-		lockWaiters := "n/a"
-		if stats.LockWaiters >= 0 {
-			lockWaiters = fmt.Sprintf("%d", stats.LockWaiters)
-		}
-		return fmt.Sprintf("Queue   waits=%d avg=%.1fms/op=%.2f lock=%s",
+		return fmt.Sprintf("Waited  %d pool waits avg=%.1fms/op=%.2f",
 			stats.WaitCount,
 			averageWaitMS(*stats),
 			waitPerOperationMS(*stats, int64(config.Operations)),
-			lockWaiters,
 		)
 	}
+}
+
+func accountSpreadLine(config SummaryConfig) string {
+	accountsPerWorker := float64(config.Accounts) / float64(max(config.Workers, 1))
+	hot := "off"
+	if config.HotAccounts > 0 {
+		hot = fmt.Sprintf("%d@%d%%", config.HotAccounts, config.HotTransferPercent)
+	}
+	return fmt.Sprintf("Spread     accounts/worker=%.1f hot=%s", accountsPerWorker, hot)
+}
+
+func connectionFailureLine(stats StatsSnapshot, dbStats *DBStats) string {
+	lockWaiters := "n/a"
+	if dbStats != nil && dbStats.LockWaiters >= 0 {
+		lockWaiters = fmt.Sprintf("%d", dbStats.LockWaiters)
+	}
+	colorCode := ansiGreen
+	if stats.PoolTimeouts > 0 || stats.ServerConnectionRejects > 0 {
+		colorCode = ansiRed
+	}
+	return color(colorCode, "", fmt.Sprintf("Failed  pool_timeouts=%d server_rejects=%d lock=%s",
+		stats.PoolTimeouts,
+		stats.ServerConnectionRejects,
+		lockWaiters,
+	))
 }
 
 func performanceGradeText(performance PerformanceGrade) string {
@@ -1218,7 +1380,7 @@ func validationCountLines(data dashboardData) []string {
 		expected int64
 		actual   int
 	}{
-		{label: "Accounts", expected: int64(data.Config.Accounts + expectedSettlementAccountCount(data.Config)), actual: summary.AccountCount},
+		{label: "Accounts", expected: int64(data.Config.Accounts + 1), actual: summary.AccountCount},
 		{label: "Txns", expected: int64(data.Config.Accounts) + data.Stats.Success, actual: summary.TransactionCount},
 		{label: "Entries", expected: 2 * (int64(data.Config.Accounts) + data.Stats.Success), actual: summary.EntryCount},
 		{label: "External", expected: int64(data.Config.Accounts) + data.Stats.BySuccessfulOperation["deposit"] + data.Stats.BySuccessfulOperation["withdrawal"], actual: summary.ExternalTransferCount},
@@ -1239,13 +1401,6 @@ func validationCountLines(data dashboardData) []string {
 		lines = append(lines, validationTableRow(row.label, expected, row.actual, status))
 	}
 	return lines
-}
-
-func expectedSettlementAccountCount(config SummaryConfig) int {
-	if config.SettlementBuckets <= 1 {
-		return 1
-	}
-	return 1 + config.SettlementBuckets
 }
 
 func validationTableHeader() string {
@@ -1288,7 +1443,10 @@ func errorLine(stats StatsSnapshot, index int) string {
 	}
 	sample := stats.ErrorSamples[index]
 	line := fmt.Sprintf("%s %s count=%d op=%s", sample.Category, sample.Code, sample.Count, sample.Operation)
-	if sample.Message != "" && (sample.Category == ledgerstore.LedgerErrorCategoryInternal || sample.Code == string(ledgerstore.LedgerErrorCodeInternalUnknown)) {
+	if sample.Message != "" && (sample.Category == ledgerstore.LedgerErrorCategoryInternal ||
+		sample.Code == string(ledgerstore.LedgerErrorCodeInternalUnknown) ||
+		sample.Code == string(ledgerstore.LedgerErrorCodeDBUnavailable) ||
+		sample.Code == string(ledgerstore.LedgerErrorCodeDBTooManyConnections)) {
 		line += " msg=" + truncate(sample.Message, 72)
 	}
 	return line
@@ -1409,21 +1567,29 @@ func errorString(err error) string {
 }
 
 type collector struct {
-	mu               sync.Mutex
-	startedAt        time.Time
-	total            int64
-	success          int64
-	failure          int64
-	retryAttempts    int64
-	byOperation      map[string]int64
-	bySuccess        map[string]int64
-	byErrorCode      map[string]int64
-	byErrorCategory  map[string]int64
-	errorSamples     map[string]*ErrorSample
-	latencies        []time.Duration
-	lastValidation   *ValidationEvent
-	maxLockWaiters   int
-	unexpectedErrors int64
+	mu                      sync.Mutex
+	startedAt               time.Time
+	total                   int64
+	success                 int64
+	failure                 int64
+	requestAttempts         int64
+	duplicateRequests       int64
+	concurrentDuplicates    int64
+	idempotentReplays       int64
+	idempotencyConflicts    int64
+	idempotencyUnexpected   int64
+	poolTimeouts            int64
+	serverConnectionRejects int64
+	retryAttempts           int64
+	byOperation             map[string]int64
+	bySuccess               map[string]int64
+	byErrorCode             map[string]int64
+	byErrorCategory         map[string]int64
+	errorSamples            map[string]*ErrorSample
+	latencies               []time.Duration
+	lastValidation          *ValidationEvent
+	maxLockWaiters          int
+	unexpectedErrors        int64
 }
 
 func newCollector(startedAt time.Time) *collector {
@@ -1462,10 +1628,60 @@ func (c *collector) record(operation string, latency time.Duration, err error) {
 	}
 	c.byErrorCode[code]++
 	c.byErrorCategory[category]++
+	if isPoolTimeout(info) {
+		c.poolTimeouts++
+	}
+	if isServerConnectionReject(info) {
+		c.serverConnectionRejects++
+	}
 	c.recordErrorSample(operation, code, category, info.Message)
 	if category != ledgerstore.LedgerErrorCategoryBusiness {
 		c.unexpectedErrors++
 	}
+}
+
+func isPoolTimeout(info ledgerstore.LedgerErrorInfo) bool {
+	message := strings.ToLower(info.Message)
+	return info.Code == ledgerstore.LedgerErrorCodeDBUnavailable &&
+		strings.Contains(message, "waiting for a connection from the pool")
+}
+
+func isServerConnectionReject(info ledgerstore.LedgerErrorInfo) bool {
+	message := strings.ToLower(info.Message)
+	return info.Code == ledgerstore.LedgerErrorCodeDBTooManyConnections ||
+		strings.Contains(message, "too many clients") ||
+		strings.Contains(message, "remaining connection slots")
+}
+
+func (c *collector) recordRequestAttempts(count int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.requestAttempts += count
+}
+
+func (c *collector) recordConcurrentDuplicate(extraRequests int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.concurrentDuplicates++
+	c.duplicateRequests += extraRequests
+}
+
+func (c *collector) recordIdempotentReplays(count int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.idempotentReplays += count
+}
+
+func (c *collector) recordIdempotencyConflict() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.idempotencyConflicts++
+}
+
+func (c *collector) recordUnexpectedIdempotency() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.idempotencyUnexpected++
 }
 
 func (c *collector) recordErrorSample(operation string, code string, category string, message string) {
@@ -1509,7 +1725,7 @@ func (c *collector) recordDBStats(stats DBStats) {
 func (c *collector) hasUnexpectedErrors() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.unexpectedErrors > 0
+	return c.unexpectedErrors > 0 || c.idempotencyUnexpected > 0
 }
 
 func (c *collector) snapshot() StatsSnapshot {
@@ -1523,20 +1739,28 @@ func (c *collector) snapshot() StatsSnapshot {
 	}
 
 	return StatsSnapshot{
-		ElapsedMS:             elapsed.Milliseconds(),
-		Total:                 c.total,
-		Success:               c.success,
-		Failure:               c.failure,
-		RetryAttempts:         c.retryAttempts,
-		OpsPerSecond:          opsPerSecond,
-		ByOperation:           copyMap(c.byOperation),
-		BySuccessfulOperation: copyMap(c.bySuccess),
-		MaxLockWaiters:        c.maxLockWaiters,
-		ByErrorCode:           copyMap(c.byErrorCode),
-		ByErrorCategory:       copyMap(c.byErrorCategory),
-		ErrorSamples:          copyErrorSamples(c.errorSamples),
-		LatencyMS:             summarizeLatency(c.latencies),
-		LastValidation:        copyValidation(c.lastValidation),
+		ElapsedMS:               elapsed.Milliseconds(),
+		Total:                   c.total,
+		Success:                 c.success,
+		Failure:                 c.failure,
+		RequestAttempts:         c.requestAttempts,
+		DuplicateRequests:       c.duplicateRequests,
+		ConcurrentDuplicates:    c.concurrentDuplicates,
+		IdempotentReplays:       c.idempotentReplays,
+		IdempotencyConflicts:    c.idempotencyConflicts,
+		IdempotencyUnexpected:   c.idempotencyUnexpected,
+		PoolTimeouts:            c.poolTimeouts,
+		ServerConnectionRejects: c.serverConnectionRejects,
+		RetryAttempts:           c.retryAttempts,
+		OpsPerSecond:            opsPerSecond,
+		ByOperation:             copyMap(c.byOperation),
+		BySuccessfulOperation:   copyMap(c.bySuccess),
+		MaxLockWaiters:          c.maxLockWaiters,
+		ByErrorCode:             copyMap(c.byErrorCode),
+		ByErrorCategory:         copyMap(c.byErrorCategory),
+		ErrorSamples:            copyErrorSamples(c.errorSamples),
+		LatencyMS:               summarizeLatency(c.latencies),
+		LastValidation:          copyValidation(c.lastValidation),
 	}
 }
 

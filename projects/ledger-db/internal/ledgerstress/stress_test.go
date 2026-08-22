@@ -67,15 +67,20 @@ func TestWriteTextEventRendersDashboard(t *testing.T) {
 			OperationTimeoutMS: 30000,
 		},
 		Stats: StatsSnapshot{
-			Total:         25,
-			Success:       24,
-			Failure:       1,
-			OpsPerSecond:  12.5,
-			ByOperation:   map[string]int64{"deposit": 4, "transfer": 18, "withdrawal": 3},
-			ByErrorCode:   map[string]int64{"internal.unknown": 1},
-			ErrorSamples:  []ErrorSample{{Code: "internal.unknown", Category: "internal", Operation: "transfer", Message: "context deadline exceeded while waiting for a connection from the pool", Count: 1}},
-			RetryAttempts: 2,
-			LatencyMS:     LatencySnapshot{Avg: 3.1, P50: 2.9, P95: 8.4, P99: 10.1, Max: 12.0},
+			Total:                25,
+			Success:              24,
+			Failure:              1,
+			RequestAttempts:      30,
+			DuplicateRequests:    5,
+			ConcurrentDuplicates: 2,
+			IdempotentReplays:    5,
+			PoolTimeouts:         1,
+			OpsPerSecond:         12.5,
+			ByOperation:          map[string]int64{"deposit": 4, "transfer": 18, "withdrawal": 3},
+			ByErrorCode:          map[string]int64{"db.unavailable": 1},
+			ErrorSamples:         []ErrorSample{{Code: "db.unavailable", Category: "db", Operation: "transfer", Message: "context deadline exceeded while waiting for a connection from the pool", Count: 1}},
+			RetryAttempts:        2,
+			LatencyMS:            LatencySnapshot{Avg: 3.1, P50: 2.9, P95: 8.4, P99: 10.1, Max: 12.0},
 		},
 	})
 
@@ -83,12 +88,23 @@ func TestWriteTextEventRendersDashboard(t *testing.T) {
 	for _, expected := range []string{
 		"LedgerDB Status",
 		"Workload",
-		"Latency",
+		"Goroutines",
+		"Workers  2 worker goroutines",
+		"Runtime",
+		"goroutines now",
+		"Other",
+		"non-worker goroutines",
 		"Operations",
 		"DB Pool",
+		"Idempotency",
+		"Concurrency",
+		"Requests  30 total for 25 logical ops",
+		"Replays  5 same-transaction returns",
+		"Spread     accounts/worker=2.5 hot=off",
+		"Failed  pool_timeouts=1 server_rejects=0 lock=0",
 		"Validation",
 		"Errors",
-		"internal.unknown",
+		"db.unavailable",
 		"msg=context deadline exceeded while waiting for a connection from the pool",
 	} {
 		if !strings.Contains(rendered, expected) {
@@ -97,6 +113,9 @@ func TestWriteTextEventRendersDashboard(t *testing.T) {
 	}
 	if strings.Contains(rendered, "progress ops=") {
 		t.Fatalf("dashboard should not use the old one-line progress format:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "Latency (bar=max)") {
+		t.Fatalf("dashboard should not render the latency panel:\n%s", rendered)
 	}
 }
 
@@ -116,18 +135,25 @@ func TestWriteTextEventRendersValidationExpectedAndActualCounts(t *testing.T) {
 				OperationTimeoutMS: 30000,
 			},
 			Stats: StatsSnapshot{
-				Total:                 50,
-				Success:               48,
-				Failure:               2,
-				ByOperation:           map[string]int64{"deposit": 8, "transfer": 34, "withdrawal": 8},
-				BySuccessfulOperation: map[string]int64{"deposit": 7, "transfer": 34, "withdrawal": 7},
-				LatencyMS:             LatencySnapshot{Avg: 3.1, P50: 2.9, P95: 8.4, P99: 10.1, Max: 12.0},
+				Total:                   50,
+				Success:                 48,
+				Failure:                 2,
+				RequestAttempts:         55,
+				DuplicateRequests:       5,
+				ConcurrentDuplicates:    2,
+				IdempotentReplays:       5,
+				IdempotencyConflicts:    1,
+				PoolTimeouts:            1,
+				ServerConnectionRejects: 1,
+				ByOperation:             map[string]int64{"deposit": 8, "transfer": 34, "withdrawal": 8},
+				BySuccessfulOperation:   map[string]int64{"deposit": 7, "transfer": 34, "withdrawal": 7},
+				LatencyMS:               LatencySnapshot{Avg: 3.1, P50: 2.9, P95: 8.4, P99: 10.1, Max: 12.0},
 			},
 			DBStats: DBStats{OpenConnections: 2, Idle: 2, MaxOpenConnections: 6},
 			Performance: PerformanceGrade{
 				Grade:           "B",
 				Score:           82,
-				Summary:         "good throughput; tail latency needs attention",
+				Summary:         "good throughput; pool queueing is visible",
 				ThroughputRPS:   725.2,
 				P95MS:           81.6,
 				P99MS:           256.0,
@@ -160,11 +186,57 @@ func TestWriteTextEventRendersValidationExpectedAndActualCounts(t *testing.T) {
 		"Issues              0          0",
 		"grade:",
 		"B/82",
+		"worker_goroutines=2",
+		"runtime_goroutines=",
 		"pool_wait/op=2.90ms",
+		"pool_timeouts=1 server_rejects=1",
+		"idem:",
+		"requests=55 duplicate_extra=5 replays=5 conflicts=1 unexpected=0",
 	} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("dashboard output missing %q:\n%s", expected, rendered)
 		}
+	}
+}
+
+func TestSummarizeDuplicateResultsRecordsIdempotentReplays(t *testing.T) {
+	collector := newCollector(timeNowForTest())
+
+	err := summarizeDuplicateResults("transfer", []requestResult{
+		{transactionID: 42},
+		{transactionID: 42},
+		{transactionID: 42},
+	}, collector)
+	if err != nil {
+		t.Fatalf("summarizeDuplicateResults returned error: %v", err)
+	}
+
+	snapshot := collector.snapshot()
+	if snapshot.IdempotentReplays != 2 {
+		t.Fatalf("idempotent replays = %d, want 2", snapshot.IdempotentReplays)
+	}
+	if snapshot.IdempotencyUnexpected != 0 {
+		t.Fatalf("unexpected idempotency failures = %d, want 0", snapshot.IdempotencyUnexpected)
+	}
+}
+
+func TestSummarizeDuplicateResultsRejectsDifferentTransactionIDs(t *testing.T) {
+	collector := newCollector(timeNowForTest())
+
+	err := summarizeDuplicateResults("transfer", []requestResult{
+		{transactionID: 42},
+		{transactionID: 43},
+	}, collector)
+	if err == nil {
+		t.Fatalf("expected duplicate transaction id mismatch error")
+	}
+
+	snapshot := collector.snapshot()
+	if snapshot.IdempotencyUnexpected != 1 {
+		t.Fatalf("unexpected idempotency failures = %d, want 1", snapshot.IdempotencyUnexpected)
+	}
+	if !collector.hasUnexpectedErrors() {
+		t.Fatalf("collector should treat idempotency mismatch as unexpected")
 	}
 }
 
@@ -181,20 +253,6 @@ func TestRandomAccountPairCanRouteToHotAccounts(t *testing.T) {
 		if from == to {
 			t.Fatalf("expected distinct accounts, got %d", from)
 		}
-	}
-}
-
-func TestSettlementAccountForIndexCyclesBuckets(t *testing.T) {
-	buckets := []ledgerstore.AccountID{101, 102, 103}
-
-	if got := settlementAccountForIndex(buckets, 0); got != 101 {
-		t.Fatalf("unexpected bucket for index 0: %d", got)
-	}
-	if got := settlementAccountForIndex(buckets, 4); got != 102 {
-		t.Fatalf("unexpected bucket for index 4: %d", got)
-	}
-	if got := settlementAccountForIndex(nil, 4); got != 0 {
-		t.Fatalf("expected default settlement account marker, got %d", got)
 	}
 }
 

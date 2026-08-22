@@ -98,49 +98,10 @@ func main() {
 
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleRoot)
-	mux.HandleFunc("/healthz", requireMethod(http.MethodGet, s.handleHealth))
-	mux.HandleFunc("/routes", requireMethod(http.MethodGet, s.handleRoutes))
 	mux.HandleFunc("/transfers", requireMethod(http.MethodPost, s.handlePostTransfer))
 	mux.HandleFunc("/external-transfers", requireMethod(http.MethodPost, s.handlePostExternalTransfer))
 	mux.HandleFunc("/reversals", requireMethod(http.MethodPost, s.handleReversal))
 	return mux
-}
-
-func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		writeNotFound(w)
-		return
-	}
-	if r.Method != http.MethodGet {
-		writeMethodNotAllowed(w, http.MethodGet)
-		return
-	}
-	s.handleRoutes(w, r)
-}
-
-func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-
-	if err := s.db.PingContext(ctx); err != nil {
-		writeLedgerError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (s *server) handleRoutes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"service": "ledger-db",
-		"routes": []map[string]string{
-			{"method": "GET", "path": "/healthz", "command": "health check"},
-			{"method": "POST", "path": "/transfers", "command": "PostTransfer"},
-			{"method": "POST", "path": "/external-transfers", "command": "PostExternalTransfer"},
-			{"method": "POST", "path": "/reversals", "command": "Reversal"},
-		},
-	})
 }
 
 func (s *server) handlePostTransfer(w http.ResponseWriter, r *http.Request) {

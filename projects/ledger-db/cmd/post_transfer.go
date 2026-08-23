@@ -12,7 +12,7 @@ func PostTransfer(
 	ctx context.Context,
 	db *sql.DB,
 	cmd ledgerstore.TransferCommand,
-) (int64, error) {
+) (ledgerstore.TransactionID, error) {
 	if cmd.FromAccountID <= 0 {
 		return 0, ledgerstore.ErrFromAccountIDRequired
 	}
@@ -56,5 +56,5 @@ func PostTransfer(
 		return 0, err
 	}
 
-	return int64(transactionID), nil
+	return transactionID, nil
 }

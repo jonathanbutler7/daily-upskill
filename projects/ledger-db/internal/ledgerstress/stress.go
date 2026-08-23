@@ -692,13 +692,12 @@ func executePlan(ctx context.Context, plan operationPlan, db *sql.DB) (ledgersto
 			ExternalTransferDirection: plan.externalDir,
 		})
 	default:
-		transactionID, err := ledger.PostTransfer(ctx, db, ledgerstore.TransferCommand{
+		return ledger.PostTransfer(ctx, db, ledgerstore.TransferCommand{
 			FromAccountID:  plan.fromAccountID,
 			ToAccountID:    plan.toAccountID,
 			Amount:         plan.amount,
 			IdempotencyKey: plan.idempotencyKey,
 		})
-		return ledgerstore.TransactionID(transactionID), err
 	}
 }
 

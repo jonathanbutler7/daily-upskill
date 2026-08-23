@@ -124,7 +124,7 @@ func (s *server) handlePostTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, commandResponse{TransactionID: transactionID})
+	writeJSON(w, http.StatusCreated, commandResponse{TransactionID: int64(transactionID)})
 }
 
 func (s *server) handlePostExternalTransfer(w http.ResponseWriter, r *http.Request) {

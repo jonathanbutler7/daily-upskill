@@ -245,12 +245,54 @@ func TestScenarioAliceSendsBob(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 0,
 		"Alice":           1000,
 		"Bob":             1000,
 	})
 	assertRowCount(t, ctx, db, "ledger_transactions", 2)
 	assertRowCount(t, ctx, db, "ledger_entries", 4)
+	assertRowCount(t, ctx, db, "settlement_update_jobs", 1)
+}
+
+func TestSettlementUpdateJobsApplyCashSettlementBalance(t *testing.T) {
+	ctx, db := openIntegrationDB(t)
+	resetScenarioDB(t, ctx, db)
+	accounts := seedAliceAndBob(t, ctx, db)
+
+	_, err := PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             accounts.alice,
+		TransferAmount:            2000,
+		Rail:                      "ach",
+		ExternalReference:         "async-settlement-seed-ext",
+		IdempotencyKey:            "async-settlement-seed",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement": 0,
+		"Alice":           2000,
+		"Bob":             0,
+	})
+
+	result, err := ledgerstore.ProcessSettlementUpdateJobs(ctx, db, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.JobsProcessed != 1 {
+		t.Fatalf("JobsProcessed = %d, want 1", result.JobsProcessed)
+	}
+	if result.AccountsUpdated != 1 {
+		t.Fatalf("AccountsUpdated = %d, want 1", result.AccountsUpdated)
+	}
+
+	assertBalances(t, ctx, db, map[string]int64{
+		"Cash Settlement": -2000,
+		"Alice":           2000,
+		"Bob":             0,
+	})
 }
 
 func TestPostExternalTransferCanUseCustomSettlementAccount(t *testing.T) {
@@ -285,7 +327,7 @@ func TestPostExternalTransferCanUseCustomSettlementAccount(t *testing.T) {
 		"Cash Settlement":        0,
 		"Alice":                  500,
 		"Bob":                    0,
-		"Cash Settlement ACH 00": -500,
+		"Cash Settlement ACH 00": 0,
 	})
 	assertTransactionEntries(t, ctx, db, depositID, map[ledgerstore.AccountID]int64{
 		settlementBucket: -500,
@@ -336,7 +378,7 @@ func TestScenarioReversalHappyPath(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 0,
 		"Alice":           2000,
 		"Bob":             0,
 	})
@@ -404,7 +446,7 @@ func TestScenarioDoubleReversalFails(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 0,
 		"Alice":           2000,
 		"Bob":             0,
 	})
@@ -447,7 +489,7 @@ func TestScenarioWithdrawal(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -1500,
+		"Cash Settlement": 0,
 		"Alice":           1500,
 		"Bob":             0,
 	})
@@ -541,7 +583,7 @@ func TestScenarioWithdrawalInsufficientFunds(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -200,
+		"Cash Settlement": 0,
 		"Alice":           200,
 		"Bob":             0,
 	})
@@ -591,7 +633,7 @@ func TestScenarioIdempotency(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 0,
 		"Alice":           1000,
 		"Bob":             1000,
 	})
@@ -627,7 +669,7 @@ func TestScenarioInsufficientFunds(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 0,
 		"Alice":           2000,
 		"Bob":             0,
 	})
@@ -663,7 +705,7 @@ func TestScenarioTransferToMissingAccount(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 0,
 		"Alice":           2000,
 		"Bob":             0,
 	})
@@ -709,7 +751,7 @@ func TestScenarioMismatchedIdempotencyKey(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -5000,
+		"Cash Settlement": 0,
 		"Alice":           4000,
 		"Bob":             1000,
 	})
@@ -757,10 +799,14 @@ func TestScenarioStoredAndDerivedBalances(t *testing.T) {
 	rows, err := db.QueryContext(ctx, `
 		select
 			la.name,
-			coalesce(sum(le.amount), 0) as derived_balance,
+			coalesce(sum(case
+				when coalesce(suj.status, 'applied') = 'applied' then le.amount
+				else 0
+			end), 0) as derived_balance,
 			la.balance as stored_balance
 		from ledger_accounts la
 		left join ledger_entries le on le.account_id = la.id
+		left join settlement_update_jobs suj on suj.ledger_entry_id = le.id
 		group by la.id, la.name, la.balance
 		order by la.id;
 	`)
@@ -770,7 +816,7 @@ func TestScenarioStoredAndDerivedBalances(t *testing.T) {
 	defer rows.Close()
 
 	want := map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 0,
 		"Alice":           800,
 		"Bob":             1200,
 	}

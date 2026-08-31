@@ -11,6 +11,7 @@ var LocalSchemaMigrations = []string{
 	"001_create_ledger_tables.sql",
 	"002_create_external_transfers.sql",
 	"003_seed_system_accounts.sql",
+	"007_create_settlement_update_jobs.sql",
 	"006_prevent_entry_mutations.sql",
 }
 

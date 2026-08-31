@@ -35,12 +35,15 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 	defer tx.Rollback()
 
-	toAccountCurrency, err := lockToAccountCurrencyForUpdate(ctx, tx, cmd.UserAccountID)
+	userBalance, userAccountCurrency, err := lockAccountForUpdate(ctx, tx, cmd.UserAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
+		return 0, ErrToAccountNotFound
+	}
 	if err != nil {
 		return 0, err
 	}
 
-	cashSettlementAccountId, err := lockSettlementAccountForUpdate(ctx, tx, cmd.SettlementAccountID, toAccountCurrency)
+	cashSettlementAccountId, err := findSettlementAccount(ctx, tx, cmd.SettlementAccountID, userAccountCurrency)
 	if err != nil {
 		return 0, err
 	}
@@ -63,7 +66,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		fromAccountID,
 		toAccountID,
 		cmd.TransferAmount,
-		toAccountCurrency,
+		userAccountCurrency,
 	)
 	if err != nil && !errors.Is(err, ErrNoRowsFound) {
 		return 0, err
@@ -81,12 +84,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 
 	if cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal {
-		balance, _, err := lockAccountForUpdate(ctx, tx, cmd.UserAccountID)
-		if err != nil {
-			return 0, err
-		}
-		err = checkBalance(balance, cmd.TransferAmount)
-		if err != nil {
+		if err := checkBalance(userBalance, cmd.TransferAmount); err != nil {
 			return 0, err
 		}
 	}
@@ -99,7 +97,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		fromAccountID,
 		toAccountID,
 		cmd.TransferAmount,
-		toAccountCurrency,
+		userAccountCurrency,
 	)
 	if errors.Is(err, ErrNoRowsFound) {
 		transactionID, err = findSameLedgerTransaction(
@@ -110,7 +108,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 			fromAccountID,
 			toAccountID,
 			cmd.TransferAmount,
-			toAccountCurrency,
+			userAccountCurrency,
 		)
 		if err == nil {
 			return transactionID, nil
@@ -129,20 +127,23 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		{AccountID: toAccountID, Amount: cmd.TransferAmount},
 	}
 	for _, entry := range entries {
-		if err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
+		entryID, err := insertLedgerEntry(ctx, tx, transactionID, entry)
+		if err != nil {
+			return 0, err
+		}
+		if entry.AccountID == cashSettlementAccountId {
+			if err := insertSettlementUpdateJob(ctx, tx, entryID, cashSettlementAccountId, entry.Amount); err != nil {
+				return 0, err
+			}
+			continue
+		}
+		if err := adjustAccountBalance(ctx, tx, entry.AccountID, entry.Amount); err != nil {
 			return 0, err
 		}
 	}
 
 	err = verifyTransactionBalances(ctx, tx, transactionID)
 	if err != nil {
-		return 0, err
-	}
-
-	if err := adjustAccountBalance(ctx, tx, fromAccountID, -cmd.TransferAmount); err != nil {
-		return 0, err
-	}
-	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount); err != nil {
 		return 0, err
 	}
 
@@ -161,7 +162,7 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		cmd.UserAccountID,
 		transactionID,
 		cmd.TransferAmount,
-		toAccountCurrency,
+		userAccountCurrency,
 	); err != nil {
 		return 0, err
 	}

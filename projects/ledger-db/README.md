@@ -40,6 +40,9 @@ psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
   -f projects/ledger-db/db/migrations/003_seed_system_accounts.sql
 
 psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
+  -f projects/ledger-db/db/migrations/007_create_settlement_update_jobs.sql
+
+psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
   -f projects/ledger-db/db/migrations/006_prevent_entry_mutations.sql
 ```
 
@@ -85,6 +88,7 @@ What this has proved so far:
 
 - Empty tables fail with `from account not found`.
 - A deposit posts balanced entries against `Cash Settlement`.
+- Cash Settlement balance updates are queued for async processing.
 - A valid transfer moves balance from one account to another.
 - Ledger entries are created with equal and opposite amounts.
 - Insufficient funds fails before moving money.
@@ -147,10 +151,12 @@ postgresql://ledger_db:password@localhost:5432/ledger_db
   - locking
   - atomic write
   - idempotency constraint
+  - durable settlement update jobs
 
 - Application code owns 
   - API shape
   - request parsing
   - retries
   - error mapping
+  - async settlement job processing
   - tests

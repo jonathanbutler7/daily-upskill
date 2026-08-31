@@ -209,16 +209,19 @@ func checkAccountBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, 
 			la.balance as stored_balance,
 			coalesce(sum(case
 				when lt.status = 'posted'
-					and le.archived = false then le.amount
+					and le.archived = false
+					and coalesce(suj.status, 'applied') = 'applied' then le.amount
 				else 0
 			end), 0) as derived_balance
 		from ledger_accounts la
 		left join ledger_entries le on le.account_id = la.id
 		left join ledger_transactions lt on lt.id = le.transaction_id
+		left join settlement_update_jobs suj on suj.ledger_entry_id = le.id
 		group by la.id, la.balance
 		having la.balance <> coalesce(sum(case
 			when lt.status = 'posted'
-				and le.archived = false then le.amount
+				and le.archived = false
+				and coalesce(suj.status, 'applied') = 'applied' then le.amount
 			else 0
 		end), 0)
 		order by la.id
@@ -307,24 +310,25 @@ func checkExternalTransfers(ctx context.Context, tx *sql.Tx, limit int) ([]Issue
 		select et.id, et.ledger_transaction_id
 		from external_transfers et
 		left join ledger_transactions lt on lt.id = et.ledger_transaction_id
-		left join ledger_accounts cs
-			on cs.name = 'Cash Settlement'
-			and cs.currency_code = et.currency_code
+		left join ledger_accounts settlement
+			on settlement.id = case
+				when et.direction = 'deposit' then lt.from_account_id
+				when et.direction = 'withdrawal' then lt.to_account_id
+			end
 		where et.status = 'posted'
 			and (
 				lt.id is null
-				or cs.id is null
+				or settlement.id is null
+				or settlement.currency_code <> et.currency_code
 				or et.completed_at is null
 				or lt.status <> 'posted'
 				or lt.type <> et.direction
 				or lt.amount <> et.amount
 				or lt.currency_code <> et.currency_code
 				or (et.direction = 'deposit'
-					and (lt.from_account_id <> cs.id
-						or lt.to_account_id <> et.user_account_id))
+					and lt.to_account_id <> et.user_account_id)
 				or (et.direction = 'withdrawal'
-					and (lt.from_account_id <> et.user_account_id
-						or lt.to_account_id <> cs.id))
+					and lt.from_account_id <> et.user_account_id)
 			)
 		order by et.id
 		limit $1;

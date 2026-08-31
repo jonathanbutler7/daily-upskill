@@ -6,7 +6,7 @@ Ledger database uses double entry bookkeeping to provide an immutable, fully aud
 
 - Handling transfer logic in a database transaction means no orphan transactions or entries are ever created
 - Each transaction must balance to zero
-- Each account balance type must match the sum of all of the account's entries (see balance definitions below)
+- Each account balance type must match the sum of all applied entries for that balance type (see balance definitions below)
 - System accounts allow for double entry bookkeeping to include external transfers
 - Idempotency keys prevent retries from causing duplicates
 - entries and transactions tables are immutable once they are posted
@@ -44,7 +44,7 @@ pending_balance = 120   // 100 - 30 + 50
 available_balance = 70  // 100 - 30
 
 System boundaries
-Ledger supports transaction states, but does not have asynchronous management. It expects the caller to initiate state transitions and decide when they should occur. The ledger validates the transition and performs the operation atomically.
+Ledger supports transaction states and a small async path for settlement balance updates. It expects the caller to initiate transaction state transitions and decide when they should occur. The ledger validates each transition and performs it atomically.
 
 ## Transfers
 
@@ -74,22 +74,29 @@ transfer of funds from user account -> Cash settlement
 
 1. ledger validates args on request
 2. ledger begins db transaction
-3. ledger locks to account and cash settlement account to avoid write conflicts
+3. ledger locks the user account to avoid write conflicts
 4. ledger guarantees the transaction is idempotent
    1. same request returns same result 
    2. conflicting request returns error
 5. ledger inserts transaction
    1. ensures idempotency
 6. ledger creates entries for to account and cash settlement account
-7. ledger adjusts account balances
-8. ledger creates external transfer records
-9. ledger commits or rolls back db transaction
+7. ledger adjusts the user account balance
+8. ledger creates a settlement update job for the cash settlement entry
+9. ledger creates external transfer records
+10. ledger commits or rolls back db transaction
 
 ### Deposits
 
 transfer of funds from Cash settlement -> user account
 
 Currently deposits use the same function as withdrawals but with the direction reversed, so the steps are the same as above.
+
+### Async settlement balance updates
+
+External transfers write both ledger entries in the request transaction, so the transaction is still balanced before the caller gets a response. The user account balance is updated in the request path because withdrawals need a fresh balance decision and deposits usually need the user-facing account to reflect the posted transfer.
+
+The settlement account balance update is queued in `settlement_update_jobs`. A worker calls `ProcessSettlementUpdateJobs`, locks the settlement account, applies one or more pending settlement entry amounts, and marks those jobs as applied in the same database transaction.
 
 ### Reversals
 
@@ -132,11 +139,11 @@ Soft delete (`archived_at`) allowed for entries and transactions tables.
 
 ### Data Correctness
 
-At an interval, ledger db will run a job that verifies all entries transaction pair balances to zero and compares stored account balances to balances derived from entries.
+At an interval, ledger db will run a job that verifies all entries transaction pair balances to zero and compares stored account balances to balances derived from applied entries.
 
 ### Serialization at scale
 
-The cash settlement account, for example, could become hot because it is a single account that all external transfers will need to get a row lock on.
+The cash settlement account, for example, could become hot because it is a single account that all external transfers need to update. External transfer requests now avoid locking that account directly and queue the settlement balance update instead.
 
 Strategies as the project scales
 

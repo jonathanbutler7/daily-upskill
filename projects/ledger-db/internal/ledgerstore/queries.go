@@ -272,26 +272,103 @@ func lockCashSettlementAccountForUpdate(
 	return AccountID(fundingAccountID), nil
 }
 
+func findSettlementAccount(
+	ctx context.Context,
+	tx *sql.Tx,
+	settlementAccountID AccountID,
+	currencyCode CurrencyCode,
+) (AccountID, error) {
+	if settlementAccountID == 0 {
+		return findCashSettlementAccount(ctx, tx, currencyCode)
+	}
+
+	const q = `
+		select currency_code
+		from ledger_accounts
+		where id = $1;
+	`
+
+	var settlementCurrency string
+	err := tx.QueryRowContext(ctx, q, settlementAccountID).Scan(&settlementCurrency)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrCashSettlementAccountNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if CurrencyCode(settlementCurrency) != currencyCode {
+		return 0, ErrCurrencyMismatch
+	}
+
+	return settlementAccountID, nil
+}
+
+func findCashSettlementAccount(
+	ctx context.Context,
+	tx *sql.Tx,
+	currencyCode CurrencyCode,
+) (AccountID, error) {
+	const q = `
+		select id
+		from ledger_accounts
+		where name = 'Cash Settlement'
+			and currency_code = $1;
+	`
+
+	var fundingAccountID int64
+	err := tx.QueryRowContext(ctx, q, currencyCode).Scan(&fundingAccountID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrCashSettlementAccountNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	return AccountID(fundingAccountID), nil
+}
+
 func insertLedgerEntry(
 	ctx context.Context,
 	tx *sql.Tx,
 	transactionID TransactionID,
 	entry LedgerEntryInput,
-) error {
+) (EntryID, error) {
 	if entry.Amount == 0 {
-		return ErrAmountGreaterThanZero
+		return 0, ErrAmountGreaterThanZero
 	}
 
 	const q = `
 		insert into ledger_entries (transaction_id, account_id, amount)
+		values ($1, $2, $3)
+		returning id;
+	`
+
+	var entryID int64
+	if err := tx.QueryRowContext(ctx, q, transactionID, entry.AccountID, entry.Amount).Scan(&entryID); err != nil {
+		return 0, err
+	}
+
+	return EntryID(entryID), nil
+}
+
+func insertSettlementUpdateJob(
+	ctx context.Context,
+	tx *sql.Tx,
+	entryID EntryID,
+	settlementAccountID AccountID,
+	amount Amount,
+) error {
+	const q = `
+		insert into settlement_update_jobs (
+			ledger_entry_id,
+			settlement_account_id,
+			amount
+		)
 		values ($1, $2, $3);
 	`
 
-	if _, err := tx.ExecContext(ctx, q, transactionID, entry.AccountID, entry.Amount); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := tx.ExecContext(ctx, q, entryID, settlementAccountID, amount)
+	return err
 }
 
 func insertExternalTransfer(

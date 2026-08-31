@@ -70,7 +70,7 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 				return 0, err
 			}
 		}
-		if err := insertLedgerEntry(ctx, tx, reversalTransactionID, entry); err != nil {
+		if _, err := insertLedgerEntry(ctx, tx, reversalTransactionID, entry); err != nil {
 			return 0, err
 		}
 	}

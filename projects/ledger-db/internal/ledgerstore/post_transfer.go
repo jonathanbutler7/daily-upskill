@@ -102,7 +102,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		{AccountID: cmd.ToAccountID, Amount: cmd.Amount},
 	}
 	for _, entry := range entries {
-		if err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
+		if _, err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
 			return 0, err
 		}
 	}

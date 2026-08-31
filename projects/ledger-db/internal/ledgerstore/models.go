@@ -3,6 +3,7 @@ package ledgerstore
 // Named types for values that cross ledgerstore helper boundaries.
 type AccountID int64
 type TransactionID int64
+type EntryID int64
 type Amount int64
 type CurrencyCode string
 type IdempotencyKey string
@@ -79,4 +80,9 @@ type Entry struct {
 type LedgerEntryInput struct {
 	AccountID AccountID
 	Amount    Amount
+}
+
+type ProcessSettlementUpdateJobsResult struct {
+	JobsProcessed   int
+	AccountsUpdated int
 }

@@ -18,6 +18,12 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	if cmd.TransferAmount <= 0 {
 		return 0, ErrAmountGreaterThanZero
 	}
+	if cmd.IdempotencyKey == "" {
+		return 0, ErrIdempotencyKeyRequired
+	}
+	if cmd.Rail == "" {
+		return 0, ErrRailValueRequired
+	}
 	if strings.TrimSpace(string(cmd.ExternalReference)) == "" {
 		return 0, ErrExternalReferenceRequired
 	}
@@ -28,6 +34,12 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	if !isDeposit && !isWithdrawal {
 		return 0, ErrMustBeWithdrawalOrDeposit
 	}
+	if cmd.UserAccountID == 0 {
+		if isWithdrawal {
+			return 0, ErrFromAccountIDRequired
+		}
+		return 0, ErrToAccountIDRequired
+	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -35,24 +47,23 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 	defer tx.Rollback()
 
-	// toAccountCurrency, err := lockToAccountCurrencyForUpdate(ctx, tx, cmd.UserAccountID)
-	// if err != nil {
-	// 	return 0, err
-	// }
-
-	// cashSettlementAccountId, err := lockSettlementAccountForUpdate(ctx, tx, cmd.SettlementAccountID, toAccountCurrency)
-	// if err != nil {
-	// 	return 0, err
-	// }
-
-	// account, err := getAccountById(ctx, tx, cmd.UserAccountID)
-
-	cashSettlementAccountId, err := getCashSettlementAccountId(ctx, tx, CurrencyCode("USD"))
+	userAccount, err := getAccountById(ctx, tx, cmd.UserAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
+		if isWithdrawal {
+			return 0, ErrFromAccountNotFound
+		}
+		return 0, ErrToAccountNotFound
+	}
 	if err != nil {
 		return 0, err
 	}
 
-	toAccountCurrency := CurrencyCode("USD")
+	toAccountCurrency := userAccount.CurrencyCode
+
+	cashSettlementAccountId, err := getSettlementAccountId(ctx, tx, cmd.SettlementAccountID, toAccountCurrency)
+	if err != nil {
+		return 0, err
+	}
 
 	var fromAccountID AccountID
 	var toAccountID AccountID
@@ -88,17 +99,6 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	if conflictingTransactionID != 0 {
 		return 0, ErrIdempotencyConflict
 	}
-
-	// if cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal {
-	// 	balance, _, err := lockAccountForUpdate(ctx, tx, cmd.UserAccountID)
-	// 	if err != nil {
-	// 		return 0, err
-	// 	}
-	// 	err = checkBalance(balance, cmd.TransferAmount)
-	// 	if err != nil {
-	// 		return 0, err
-	// 	}
-	// }
 
 	transactionID, err = insertLedgerTransaction(
 		ctx,
@@ -148,10 +148,10 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
+	if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
 		return 0, err
 	}
-	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
+	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
 		return 0, err
 	}
 

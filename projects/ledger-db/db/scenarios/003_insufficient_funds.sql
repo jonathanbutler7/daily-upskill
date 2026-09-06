@@ -3,10 +3,10 @@ truncate table external_transfers, ledger_reversals, ledger_entries, ledger_tran
 
 \ir ../migrations/003_seed_system_accounts.sql
 
-insert into ledger_accounts(name, description, currency_code, balance)
+insert into ledger_accounts(name, description, currency_code, normal_balance, ledgerable_type, balance)
 values 
-    ('Alice', 'Alice Wallet', 'USD', 0),
-    ('Bob', 'Bob Wallet', 'USD', 0);
+    ('Alice', 'Alice Wallet', 'USD', 'credit', 'internal_account', 0),
+    ('Bob', 'Bob Wallet', 'USD', 'credit', 'internal_account', 0);
 
 select deposit_funds(2, 2000, 'ach', 'alice-insufficient-seed-ext', 'alice-insufficient-seed') as deposit_transaction_id;
 select post_transfer(2, 3, 3000, 'same-key');

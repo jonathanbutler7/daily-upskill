@@ -42,7 +42,8 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 	for _, entry := range entries {
 		reversalEntries = append(reversalEntries, LedgerEntryInput{
 			AccountID: entry.AccountID,
-			Amount:    -entry.Amount,
+			Amount:    entry.Amount,
+			Direction: oppositeEntryDirection(entry.EntryDirection),
 		})
 	}
 
@@ -61,15 +62,6 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 	}
 
 	for _, entry := range reversalEntries {
-		currentBalance, _, err := lockAccountForUpdate(ctx, tx, entry.AccountID)
-		if err != nil {
-			return 0, err
-		}
-		if entry.Amount < 0 {
-			if err := checkBalance(currentBalance, -entry.Amount); err != nil {
-				return 0, err
-			}
-		}
 		if err := insertLedgerEntry(ctx, tx, reversalTransactionID, entry); err != nil {
 			return 0, err
 		}
@@ -80,7 +72,7 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 	}
 
 	for _, entry := range reversalEntries {
-		if err := adjustAccountBalance(ctx, tx, entry.AccountID, entry.Amount, EntryDirectionDebit); err != nil {
+		if err := adjustAccountBalance(ctx, tx, entry.AccountID, entry.Amount, entry.Direction); err != nil {
 			return 0, err
 		}
 	}
@@ -94,6 +86,13 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 	}
 
 	return reversalTransactionID, nil
+}
+
+func oppositeEntryDirection(direction EntryDirection) EntryDirection {
+	if direction == EntryDirectionDebit {
+		return EntryDirectionCredit
+	}
+	return EntryDirectionDebit
 }
 
 func insertLedgerReversal(ctx context.Context, tx *sql.Tx, originalTransactionID TransactionID, reversalTransactionID TransactionID, reason Reason) error {
@@ -156,7 +155,7 @@ func findReversalByOriginalTransactionId(ctx context.Context, tx *sql.Tx, transa
 
 func getEntriesByTransactionId(ctx context.Context, tx *sql.Tx, transactionID TransactionID) ([]Entry, error) {
 	const q = `
-		select id, transaction_id, account_id, amount, created_at::text
+		select id, transaction_id, account_id, amount, created_at::text, direction
 		from ledger_entries
 		where transaction_id = $1
 		order by account_id, id;
@@ -177,6 +176,7 @@ func getEntriesByTransactionId(ctx context.Context, tx *sql.Tx, transactionID Tr
 			&entry.AccountID,
 			&entry.Amount,
 			&entry.CreatedAt,
+			&entry.EntryDirection,
 		); err != nil {
 			return nil, err
 		}

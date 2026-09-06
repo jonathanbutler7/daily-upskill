@@ -190,25 +190,39 @@ func adjustAccountBalance(
 	amountDelta Amount,
 	entryDirection EntryDirection,
 ) error {
-	const creditQ = `
-		update ledger_accounts
-		set balance = balance + $1
-		where id = $2 and balance >= $1;
-	`
-	const debitQ = `
-		update ledger_accounts
-		set balance = balance - $1
-		where id = $2 and balance >= $1;
-	`
-	var q string
-	if entryDirection == EntryDirectionCredit {
-		q = creditQ
-	} else if entryDirection == EntryDirectionDebit {
-		q = debitQ
+	if entryDirection != EntryDirectionCredit && entryDirection != EntryDirectionDebit {
+		return ErrMustBeWithdrawalOrDeposit
 	}
 
-	_, err := tx.ExecContext(ctx, q, amountDelta, accountID)
-	return err
+	const q = `
+		update ledger_accounts
+		set
+			balance = case
+				when normal_balance = $3 then balance + $1
+				else balance - $1
+			end,
+			lock_version = lock_version + 1
+		where id = $2
+			and (
+				normal_balance = $3
+				or balance >= $1
+			);
+	`
+
+	result, err := tx.ExecContext(ctx, q, amountDelta, accountID, entryDirection)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrInsufficientFunds
+	}
+
+	return nil
 }
 
 func verifyTransactionBalances(ctx context.Context, tx *sql.Tx, transactionID TransactionID) error {
@@ -279,27 +293,63 @@ func getAccountById(
 	accountId AccountID,
 ) (Account, error) {
 	const q = `
-		select *
+		select
+			id,
+			name,
+			description,
+			currency_code,
+			normal_balance,
+			ledgerable_type,
+			lock_version,
+			balance,
+			created_at
 		from ledger_accounts
 		where id = $1;
 	`
 
 	var account Account
-	err := tx.QueryRowContext(ctx, q, accountId).Scan(&account)
+	err := tx.QueryRowContext(ctx, q, accountId).Scan(
+		&account.ID,
+		&account.Name,
+		&account.Description,
+		&account.CurrencyCode,
+		&account.NormalBalance,
+		&account.LedgerableType,
+		&account.LockVersion,
+		&account.Balance,
+		&account.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Account{}, ErrNoRowsFound
+	}
 	if err != nil {
 		return Account{}, err
 	}
-	return Account{
-		ID:             account.ID,
-		Name:           account.Name,
-		Description:    account.Description,
-		CurrencyCode:   account.CurrencyCode,
-		NormalBalance:  account.NormalBalance,
-		LedgerableType: account.LedgerableType,
-		LockVersion:    account.LockVersion,
-		Balance:        account.Balance,
-		CreatedAt:      account.CreatedAt,
-	}, nil
+	return account, nil
+}
+
+func getSettlementAccountId(
+	ctx context.Context,
+	tx *sql.Tx,
+	settlementAccountID AccountID,
+	currencyCode CurrencyCode,
+) (AccountID, error) {
+	if settlementAccountID == 0 {
+		return getCashSettlementAccountId(ctx, tx, currencyCode)
+	}
+
+	account, err := getAccountById(ctx, tx, settlementAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
+		return 0, ErrCashSettlementAccountNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if account.CurrencyCode != currencyCode {
+		return 0, ErrCurrencyMismatch
+	}
+
+	return account.ID, nil
 }
 
 func getCashSettlementAccountId(
@@ -317,6 +367,9 @@ func getCashSettlementAccountId(
 	err := tx.QueryRowContext(ctx, q, currencyCode).Scan(&accountID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrCashSettlementAccountNotFound
+	}
+	if err != nil {
+		return 0, err
 	}
 
 	return AccountID(accountID), nil
@@ -353,7 +406,7 @@ func insertLedgerEntry(
 	transactionID TransactionID,
 	entry LedgerEntryInput,
 ) error {
-	if entry.Amount == 0 {
+	if entry.Amount <= 0 {
 		return ErrAmountGreaterThanZero
 	}
 

@@ -174,11 +174,11 @@ func assertTransactionType(t *testing.T, ctx context.Context, db *sql.DB, transa
 	}
 }
 
-func assertTransactionEntries(t *testing.T, ctx context.Context, db *sql.DB, transactionID ledgerstore.TransactionID, want map[ledgerstore.AccountID]int64) {
+func assertTransactionEntries(t *testing.T, ctx context.Context, db *sql.DB, transactionID ledgerstore.TransactionID, want map[ledgerstore.AccountID]expectedEntry) {
 	t.Helper()
 
 	rows, err := db.QueryContext(ctx, `
-		select account_id, amount
+		select account_id, amount, direction
 		from ledger_entries
 		where transaction_id = $1
 		order by account_id;
@@ -191,15 +191,19 @@ func assertTransactionEntries(t *testing.T, ctx context.Context, db *sql.DB, tra
 	for rows.Next() {
 		var accountID int64
 		var amount int64
-		if err := rows.Scan(&accountID, &amount); err != nil {
+		var direction string
+		if err := rows.Scan(&accountID, &amount, &direction); err != nil {
 			t.Fatal(err)
 		}
-		wantAmount, ok := want[ledgerstore.AccountID(accountID)]
+		wantEntry, ok := want[ledgerstore.AccountID(accountID)]
 		if !ok {
 			t.Fatalf("unexpected account_id %d for transaction %d", accountID, transactionID)
 		}
-		if amount != wantAmount {
-			t.Fatalf("transaction %d account %d amount = %d, want %d", transactionID, accountID, amount, wantAmount)
+		if amount != wantEntry.amount {
+			t.Fatalf("transaction %d account %d amount = %d, want %d", transactionID, accountID, amount, wantEntry.amount)
+		}
+		if ledgerstore.EntryDirection(direction) != wantEntry.direction {
+			t.Fatalf("transaction %d account %d direction = %q, want %q", transactionID, accountID, direction, wantEntry.direction)
 		}
 		delete(want, ledgerstore.AccountID(accountID))
 	}
@@ -209,6 +213,11 @@ func assertTransactionEntries(t *testing.T, ctx context.Context, db *sql.DB, tra
 	if len(want) > 0 {
 		t.Fatalf("missing entries for transaction %d: %v", transactionID, want)
 	}
+}
+
+type expectedEntry struct {
+	amount    int64
+	direction ledgerstore.EntryDirection
 }
 
 func TestScenarioAliceSendsBob(t *testing.T) {
@@ -245,7 +254,7 @@ func TestScenarioAliceSendsBob(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 2000,
 		"Alice":           1000,
 		"Bob":             1000,
 	})
@@ -285,11 +294,11 @@ func TestPostExternalTransferCanUseCustomSettlementAccount(t *testing.T) {
 		"Cash Settlement":        0,
 		"Alice":                  500,
 		"Bob":                    0,
-		"Cash Settlement ACH 00": -500,
+		"Cash Settlement ACH 00": 500,
 	})
-	assertTransactionEntries(t, ctx, db, depositID, map[ledgerstore.AccountID]int64{
-		settlementBucket: -500,
-		accounts.alice:   500,
+	assertTransactionEntries(t, ctx, db, depositID, map[ledgerstore.AccountID]expectedEntry{
+		settlementBucket: {amount: 500, direction: ledgerstore.EntryDirectionDebit},
+		accounts.alice:   {amount: 500, direction: ledgerstore.EntryDirectionCredit},
 	})
 }
 
@@ -336,19 +345,19 @@ func TestScenarioReversalHappyPath(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 2000,
 		"Alice":           2000,
 		"Bob":             0,
 	})
 	assertTransactionType(t, ctx, db, transferTransactionID, ledgerstore.LedgerTransactionTypeTransfer)
 	assertTransactionType(t, ctx, db, reversalID, ledgerstore.LedgerTransactionTypeReversal)
-	assertTransactionEntries(t, ctx, db, transferTransactionID, map[ledgerstore.AccountID]int64{
-		accounts.alice: -1000,
-		accounts.bob:   1000,
+	assertTransactionEntries(t, ctx, db, transferTransactionID, map[ledgerstore.AccountID]expectedEntry{
+		accounts.alice: {amount: 1000, direction: ledgerstore.EntryDirectionDebit},
+		accounts.bob:   {amount: 1000, direction: ledgerstore.EntryDirectionCredit},
 	})
-	assertTransactionEntries(t, ctx, db, reversalID, map[ledgerstore.AccountID]int64{
-		accounts.alice: 1000,
-		accounts.bob:   -1000,
+	assertTransactionEntries(t, ctx, db, reversalID, map[ledgerstore.AccountID]expectedEntry{
+		accounts.alice: {amount: 1000, direction: ledgerstore.EntryDirectionCredit},
+		accounts.bob:   {amount: 1000, direction: ledgerstore.EntryDirectionDebit},
 	})
 	assertLedgerReversal(t, ctx, db, transferTransactionID, reversalID, reversalReason)
 	assertRowCount(t, ctx, db, "ledger_transactions", 3)
@@ -404,7 +413,7 @@ func TestScenarioDoubleReversalFails(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 2000,
 		"Alice":           2000,
 		"Bob":             0,
 	})
@@ -447,7 +456,7 @@ func TestScenarioWithdrawal(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -1500,
+		"Cash Settlement": 1500,
 		"Alice":           1500,
 		"Bob":             0,
 	})
@@ -541,7 +550,7 @@ func TestScenarioWithdrawalInsufficientFunds(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -200,
+		"Cash Settlement": 200,
 		"Alice":           200,
 		"Bob":             0,
 	})
@@ -591,7 +600,7 @@ func TestScenarioIdempotency(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 2000,
 		"Alice":           1000,
 		"Bob":             1000,
 	})
@@ -627,7 +636,7 @@ func TestScenarioInsufficientFunds(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 2000,
 		"Alice":           2000,
 		"Bob":             0,
 	})
@@ -663,7 +672,7 @@ func TestScenarioTransferToMissingAccount(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 2000,
 		"Alice":           2000,
 		"Bob":             0,
 	})
@@ -709,7 +718,7 @@ func TestScenarioMismatchedIdempotencyKey(t *testing.T) {
 	}
 
 	assertBalances(t, ctx, db, map[string]int64{
-		"Cash Settlement": -5000,
+		"Cash Settlement": 5000,
 		"Alice":           4000,
 		"Bob":             1000,
 	})
@@ -757,11 +766,16 @@ func TestScenarioStoredAndDerivedBalances(t *testing.T) {
 	rows, err := db.QueryContext(ctx, `
 		select
 			la.name,
-			coalesce(sum(le.amount), 0) as derived_balance,
+			coalesce(sum(
+				case
+					when le.direction = la.normal_balance then le.amount
+					else -le.amount
+				end
+			), 0) as derived_balance,
 			la.balance as stored_balance
 		from ledger_accounts la
 		left join ledger_entries le on le.account_id = la.id
-		group by la.id, la.name, la.balance
+		group by la.id, la.name, la.balance, la.normal_balance
 		order by la.id;
 	`)
 	if err != nil {
@@ -770,7 +784,7 @@ func TestScenarioStoredAndDerivedBalances(t *testing.T) {
 	defer rows.Close()
 
 	want := map[string]int64{
-		"Cash Settlement": -2000,
+		"Cash Settlement": 2000,
 		"Alice":           800,
 		"Bob":             1200,
 	}

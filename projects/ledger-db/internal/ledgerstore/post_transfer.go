@@ -10,6 +10,15 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 	if cmd.Amount <= 0 {
 		return 0, ErrAmountGreaterThanZero
 	}
+	if cmd.IdempotencyKey == "" {
+		return 0, ErrIdempotencyKeyRequired
+	}
+	if cmd.FromAccountID == 0 {
+		return 0, ErrFromAccountIDRequired
+	}
+	if cmd.ToAccountID == 0 {
+		return 0, ErrToAccountIDRequired
+	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -17,21 +26,25 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 	}
 	defer tx.Rollback()
 
-	// fromBalance, fromCurrency, err := lockAccountForUpdate(ctx, tx, cmd.FromAccountID)
-	// if err != nil {
-	// 	return 0, err
-	// }
+	fromAccount, err := getAccountById(ctx, tx, cmd.FromAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
+		return 0, ErrFromAccountNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
 
-	// toCurrency, err := lockToAccountCurrencyForUpdate(ctx, tx, cmd.ToAccountID)
-	// if err != nil {
-	// 	return 0, err
-	// }
+	toAccount, err := getAccountById(ctx, tx, cmd.ToAccountID)
+	if errors.Is(err, ErrNoRowsFound) {
+		return 0, ErrToAccountNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
 
-	// if err := checkCurrencyMatch(fromCurrency, toCurrency); err != nil {
-	// 	return 0, err
-	// }
-
-	fromCurrency := CurrencyCode("USD")
+	if err := checkCurrencyMatch(fromAccount.CurrencyCode, toAccount.CurrencyCode); err != nil {
+		return 0, err
+	}
 
 	transactionID, err := findSameLedgerTransaction(
 		ctx,
@@ -41,7 +54,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		cmd.FromAccountID,
 		cmd.ToAccountID,
 		cmd.Amount,
-		fromCurrency,
+		fromAccount.CurrencyCode,
 	)
 	if err != nil && !errors.Is(err, ErrNoRowsFound) {
 		return 0, err
@@ -62,10 +75,6 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, ErrIdempotencyConflict
 	}
 
-	// if err := checkBalance(fromBalance, cmd.Amount); err != nil {
-	// 	return 0, err
-	// }
-
 	transactionID, err = insertLedgerTransaction(
 		ctx,
 		tx,
@@ -74,7 +83,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		cmd.FromAccountID,
 		cmd.ToAccountID,
 		cmd.Amount,
-		fromCurrency,
+		fromAccount.CurrencyCode,
 	)
 	if errors.Is(err, ErrNoRowsFound) {
 		transactionID, err = findSameLedgerTransaction(
@@ -85,7 +94,7 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 			cmd.FromAccountID,
 			cmd.ToAccountID,
 			cmd.Amount,
-			fromCurrency,
+			fromAccount.CurrencyCode,
 		)
 		if err == nil {
 			return transactionID, nil

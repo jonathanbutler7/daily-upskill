@@ -12,16 +12,22 @@ import (
 func TestVerifyTransactionBalances(t *testing.T) {
 	tests := []struct {
 		name    string
-		entries []int64
+		entries []LedgerEntryInput
 		wantErr error
 	}{
 		{
-			name:    "balanced entries",
-			entries: []int64{-1000, 1000},
+			name: "balanced entries",
+			entries: []LedgerEntryInput{
+				{Amount: 1000, Direction: EntryDirectionDebit},
+				{Amount: 1000, Direction: EntryDirectionCredit},
+			},
 		},
 		{
-			name:    "unbalanced entries",
-			entries: []int64{-1000, 900},
+			name: "unbalanced entries",
+			entries: []LedgerEntryInput{
+				{Amount: 1000, Direction: EntryDirectionDebit},
+				{Amount: 900, Direction: EntryDirectionCredit},
+			},
 			wantErr: ErrTransactionNotBalanced,
 		},
 	}
@@ -106,7 +112,7 @@ func insertBalanceTestEntries(
 	ctx context.Context,
 	tx *sql.Tx,
 	transactionID TransactionID,
-	entries []int64,
+	entries []LedgerEntryInput,
 ) {
 	t.Helper()
 
@@ -120,11 +126,11 @@ func insertBalanceTestEntries(
 		t.Fatal(err)
 	}
 
-	for _, amount := range entries {
+	for _, entry := range entries {
 		_, err := tx.ExecContext(ctx, `
-			insert into ledger_entries (transaction_id, account_id, amount)
-			values ($1, $2, $3);
-		`, transactionID, accountID, amount)
+			insert into ledger_entries (transaction_id, account_id, amount, direction)
+			values ($1, $2, $3, $4);
+		`, transactionID, accountID, entry.Amount, entry.Direction)
 		if err != nil {
 			t.Fatal(err)
 		}

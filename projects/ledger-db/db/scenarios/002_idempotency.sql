@@ -3,10 +3,10 @@ truncate table external_transfers, ledger_reversals, ledger_entries, ledger_tran
 
 \ir ../migrations/003_seed_system_accounts.sql
 
-insert into ledger_accounts(name, description, currency_code, balance)
+insert into ledger_accounts(name, description, currency_code, normal_balance, ledgerable_type, balance)
 values 
-    ('Alice', 'Alice Wallet', 'USD', 0),
-    ('Bob', 'Bob Wallet', 'USD', 0);
+    ('Alice', 'Alice Wallet', 'USD', 'credit', 'internal_account', 0),
+    ('Bob', 'Bob Wallet', 'USD', 'credit', 'internal_account', 0);
 
 select deposit_funds(2, 2000, 'ach', 'alice-idempotency-seed-ext', 'alice-idempotency-seed') as deposit_transaction_id;
 select post_transfer(2, 3, 1000, 'same-request') as first_transaction_id;
@@ -35,11 +35,11 @@ select * from ledger_entries order by id;
 --                      2
 -- (1 row)
 
---  id | name  | description  | currency_code | balance |          created_at
--- ----+-------+--------------+---------------+---------+-------------------------------
---   1 | Cash Settlement | Internal account used to balance settled external money movement | USD | -2000 | ...
---   2 | Alice           | Alice Wallet                                                     | USD |  1000 | ...
---   3 | Bob             | Bob Wallet                                                       | USD |  1000 | ...
+--  id |       name      | currency_code | normal_balance | ledgerable_type  | balance
+-- ----+-----------------+---------------+----------------+------------------+---------
+--   1 | Cash Settlement | USD           | debit          | external_account |    2000
+--   2 | Alice           | USD           | credit         | internal_account |    1000
+--   3 | Bob             | USD           | credit         | internal_account |    1000
 -- (3 rows)
 
 --  id |   type   |    idempotency_key     |          created_at           | from_account_id | to_account_id | amount | currency_code
@@ -48,10 +48,10 @@ select * from ledger_entries order by id;
 --   2 | transfer | same-request           | 2026-07-03 21:55:58.843556-05 |               2 |             3 |   1000 | USD
 -- (2 rows)
 
---  id | transaction_id | account_id | amount |          created_at
--- ----+----------------+------------+--------+-------------------------------
---   1 |              1 |          1 |  -2000 | 2026-07-03 21:55:58.838453-05
---   2 |              1 |          2 |   2000 | 2026-07-03 21:55:58.838453-05
---   3 |              2 |          2 |  -1000 | 2026-07-03 21:55:58.843556-05
---   4 |              2 |          3 |   1000 | 2026-07-03 21:55:58.843556-05
+--  id | transaction_id | account_id | amount | direction |          created_at
+-- ----+----------------+------------+--------+-----------+-------------------------------
+--   1 |              1 |          1 |   2000 | debit     | 2026-07-03 21:55:58.838453-05
+--   2 |              1 |          2 |   2000 | credit    | 2026-07-03 21:55:58.838453-05
+--   3 |              2 |          2 |   1000 | debit     | 2026-07-03 21:55:58.843556-05
+--   4 |              2 |          3 |   1000 | credit    | 2026-07-03 21:55:58.843556-05
 -- (4 rows)

@@ -3,10 +3,10 @@ truncate table external_transfers, ledger_reversals, ledger_entries, ledger_tran
 
 \ir ../migrations/003_seed_system_accounts.sql
 
-insert into ledger_accounts (name, description, currency_code, balance)
+insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
 values
-    ('Alice', 'Alice wallet', 'USD', 0),
-    ('Bob', 'Bob wallet', 'USD', 0);
+    ('Alice', 'Alice wallet', 'USD', 'credit', 'internal_account', 0),
+    ('Bob', 'Bob wallet', 'USD', 'credit', 'internal_account', 0);
 
 select deposit_funds(2, 2000, 'ach', 'seed-alice-2000-ext', 'seed-alice-2000') as deposit_transaction_id;
 select post_transfer(2, 3, 1000, 'alice-sends-bob-1000') as transfer_transaction_id;
@@ -19,16 +19,22 @@ select id, type, idempotency_key, from_account_id, to_account_id, amount
 from ledger_transactions
 order by id;
 
-select id, transaction_id, account_id, amount
+select id, transaction_id, account_id, amount, direction
 from ledger_entries
 order by id;
 
 select
-    account_id,
-    sum(amount) as derived_balance
-from ledger_entries
-group by account_id
-order by account_id;
+    le.account_id,
+    sum(
+        case
+            when le.direction = la.normal_balance then le.amount
+            else -le.amount
+        end
+    ) as derived_balance
+from ledger_entries le
+join ledger_accounts la on la.id = le.account_id
+group by le.account_id
+order by le.account_id;
 
 -- RESULT
 -- TRUNCATE TABLE
@@ -46,7 +52,7 @@ order by account_id;
 
 --  id |       name       | currency_code | balance
 -- ----+------------------+---------------+---------
---   1 | Cash Settlement  | USD           |   -2000
+--   1 | Cash Settlement  | USD           |    2000
 --   2 | Alice            | USD           |    1000
 --   3 | Bob              | USD           |    1000
 -- (3 rows)
@@ -57,17 +63,17 @@ order by account_id;
 --   2 | transfer | alice-sends-bob-1000 |               2 |             3 |   1000
 -- (2 rows)
 
---  id | transaction_id | account_id | amount
--- ----+----------------+------------+--------
---   1 |              1 |          1 |  -2000
---   2 |              1 |          2 |   2000
---   3 |              2 |          2 |  -1000
---   4 |              2 |          3 |   1000
+--  id | transaction_id | account_id | amount | direction
+-- ----+----------------+------------+--------+-----------
+--   1 |              1 |          1 |   2000 | debit
+--   2 |              1 |          2 |   2000 | credit
+--   3 |              2 |          2 |   1000 | debit
+--   4 |              2 |          3 |   1000 | credit
 -- (4 rows)
 --
 --  account_id | derived_balance
 -- ------------+-----------------
---           1 |           -2000
+--           1 |            2000
 --           2 |            1000
 --           3 |            1000
 -- (3 rows)

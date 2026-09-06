@@ -134,18 +134,36 @@ begin
     end;
 
     -- Insert entries.
-    insert into ledger_entries (transaction_id, account_id, amount)
+    insert into ledger_entries (transaction_id, account_id, amount, direction)
     values
-        (new_transaction_id, from_account_id, -transfer_amount),
-        (new_transaction_id, to_account_id, transfer_amount);
+        (new_transaction_id, from_account_id, transfer_amount, 'debit'),
+        (new_transaction_id, to_account_id, transfer_amount, 'credit');
 
     -- Update balances.
     update ledger_accounts
-    set balance = balance - transfer_amount
-    where id = from_account_id;
+    set
+        balance = case
+            when normal_balance = 'debit' then balance + transfer_amount
+            else balance - transfer_amount
+        end,
+        lock_version = lock_version + 1
+    where id = from_account_id
+        and (
+            normal_balance = 'debit'
+            or balance >= transfer_amount
+        );
+
+    if not found then
+        raise exception 'insufficient funds';
+    end if;
 
     update ledger_accounts
-    set balance = balance + transfer_amount
+    set
+        balance = case
+            when normal_balance = 'credit' then balance + transfer_amount
+            else balance - transfer_amount
+        end,
+        lock_version = lock_version + 1
     where id = to_account_id;
 
     return new_transaction_id;

@@ -98,18 +98,28 @@ begin
     returning id into new_transaction_id;
     
     -- Insert ledger entries.
-    insert into ledger_entries (transaction_id, account_id, amount)
+    insert into ledger_entries (transaction_id, account_id, amount, direction)
     values
-        (new_transaction_id, funding_account_id, -transfer_amount),
-        (new_transaction_id, to_account_id, transfer_amount);
+        (new_transaction_id, funding_account_id, transfer_amount, 'debit'),
+        (new_transaction_id, to_account_id, transfer_amount, 'credit');
     
     -- Update balances.
     update ledger_accounts
-    set balance = balance - transfer_amount
+    set
+        balance = case
+            when normal_balance = 'debit' then balance + transfer_amount
+            else balance - transfer_amount
+        end,
+        lock_version = lock_version + 1
     where id = funding_account_id;
 
     update ledger_accounts
-    set balance = balance + transfer_amount
+    set
+        balance = case
+            when normal_balance = 'credit' then balance + transfer_amount
+            else balance - transfer_amount
+        end,
+        lock_version = lock_version + 1
     where id = to_account_id;
 
     -- Insert row into external_transfers table.

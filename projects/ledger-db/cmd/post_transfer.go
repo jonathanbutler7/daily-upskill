@@ -7,7 +7,6 @@ import (
 	"ledger-db/internal/ledgerstore"
 )
 
-
 func PostTransfer(
 	ctx context.Context,
 	db *sql.DB,

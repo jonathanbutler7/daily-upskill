@@ -14,6 +14,15 @@ PostTransfer SQL helper functions
 
 // 0 Look up and lock an account
 func lockAccountForUpdate(ctx context.Context, tx *sql.Tx, accountID AccountID) (Amount, CurrencyCode, error) {
+	// jan (new employee at weave) suggested this as
+	// an alternative to row locks. i am reading it now
+	// and realizing i don't totally understand the intent.
+	// i'll either get an understanding about it from an
+	// agent or just ask him some time.
+	// update accounts
+	// set balance = balance - 50
+	// where id = ___
+	// and balance > 50
 	const q = `
 		select balance, currency_code
 		from ledger_accounts

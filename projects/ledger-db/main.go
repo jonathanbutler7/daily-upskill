@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	cmd "ledger-db/cmd"
-	"ledger-db/internal/ledgerstore"
-	"ledger-db/internal/ledgervalidator"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +14,9 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	cmd "ledger-db/cmd"
+	"ledger-db/internal/ledgerstore"
+	"ledger-db/internal/ledgervalidator"
 )
 
 const (
@@ -103,6 +103,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/transfers", requireMethod(http.MethodPost, s.handlePostTransfer))
 	mux.HandleFunc("/external-transfers", requireMethod(http.MethodPost, s.handlePostExternalTransfer))
 	mux.HandleFunc("/reversals", requireMethod(http.MethodPost, s.handleReversal))
+
 	mux.HandleFunc("/validation", requireMethod(http.MethodGet, s.handleValidation))
 	return mux
 }

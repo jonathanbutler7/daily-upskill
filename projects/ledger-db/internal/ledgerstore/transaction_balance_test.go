@@ -63,8 +63,8 @@ func insertBalanceTestTransaction(t *testing.T, ctx context.Context, tx *sql.Tx)
 
 	var fromAccountID int64
 	err := tx.QueryRowContext(ctx, `
-		insert into ledger_accounts (name, description, currency_code, balance)
-		values ('Balance Test From', 'Balance test account', 'USD', 0)
+		insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
+		values ('Balance Test From', 'Balance test account', 'USD', 'credit', 'internal_account', 0)
 		returning id;
 	`).Scan(&fromAccountID)
 	if err != nil {
@@ -73,8 +73,8 @@ func insertBalanceTestTransaction(t *testing.T, ctx context.Context, tx *sql.Tx)
 
 	var toAccountID int64
 	err = tx.QueryRowContext(ctx, `
-		insert into ledger_accounts (name, description, currency_code, balance)
-		values ('Balance Test To', 'Balance test account', 'USD', 0)
+		insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
+		values ('Balance Test To', 'Balance test account', 'USD', 'credit', 'internal_account', 0)
 		returning id;
 	`).Scan(&toAccountID)
 	if err != nil {

@@ -245,10 +245,10 @@ func seedAliceAndBob(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
 
 	_, err := db.ExecContext(ctx, `
-		insert into ledger_accounts (name, description, currency_code, balance)
+		insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
 		values
-			('Alice', 'Alice Wallet', 'USD', 0),
-			('Bob', 'Bob Wallet', 'USD', 0);
+			('Alice', 'Alice Wallet', 'USD', 'credit', 'internal_account', 0),
+			('Bob', 'Bob Wallet', 'USD', 'credit', 'internal_account', 0);
 	`)
 	if err != nil {
 		t.Fatal(err)

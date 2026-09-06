@@ -42,8 +42,8 @@ func seedAliceAndBob(t *testing.T, ctx context.Context, db *sql.DB) scenarioAcco
 	}
 
 	err = db.QueryRowContext(ctx, `
-		insert into ledger_accounts (name, description, currency_code, balance)
-		values ('Alice', 'Alice Wallet', 'USD', 0)
+		insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
+		values ('Alice', 'Alice Wallet', 'USD', 'credit', 'internal_account', 0)
 		returning id;
 	`).Scan(&accounts.alice)
 	if err != nil {
@@ -51,8 +51,8 @@ func seedAliceAndBob(t *testing.T, ctx context.Context, db *sql.DB) scenarioAcco
 	}
 
 	err = db.QueryRowContext(ctx, `
-		insert into ledger_accounts (name, description, currency_code, balance)
-		values ('Bob', 'Bob Wallet', 'USD', 0)
+		insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
+		values ('Bob', 'Bob Wallet', 'USD', 'credit', 'internal_account', 0)
 		returning id;
 	`).Scan(&accounts.bob)
 	if err != nil {
@@ -260,8 +260,8 @@ func TestPostExternalTransferCanUseCustomSettlementAccount(t *testing.T) {
 
 	var settlementBucket ledgerstore.AccountID
 	err := db.QueryRowContext(ctx, `
-		insert into ledger_accounts (name, description, currency_code, balance)
-		values ('Cash Settlement ACH 00', 'ACH bucket', 'USD', 0)
+		insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
+		values ('Cash Settlement ACH 00', 'ACH bucket', 'USD', 'debit', 'external_account', 0)
 		returning id;
 	`).Scan(&settlementBucket)
 	if err != nil {

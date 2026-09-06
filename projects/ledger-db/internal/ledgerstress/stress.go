@@ -1193,6 +1193,10 @@ func writeDashboard(output io.Writer, data dashboardData) {
 		writeDashboardRow(output, line, errorLine(stats, i+1))
 	}
 	writeDashboardRow(output, validationErrorLine(data), errorLine(stats, len(countLines)+1))
+	issueLines := validationIssueLines(data, 5)
+	for _, line := range issueLines {
+		writeDashboardRow(output, line, "")
+	}
 
 	if data.Final {
 		fmt.Fprintln(output)
@@ -1428,6 +1432,94 @@ func validationErrorLine(data dashboardData) string {
 		return dim("No validation error")
 	}
 	return color(ansiRed, "", data.ValidationError)
+}
+
+func validationIssueLines(data dashboardData, maxRows int) []string {
+	if data.FinalValidation == nil || len(data.FinalValidation.Issues) == 0 || maxRows <= 0 {
+		return nil
+	}
+
+	type issueGroup struct {
+		check  ledgervalidator.CheckName
+		code   string
+		count  int
+		sample ledgervalidator.Issue
+	}
+
+	groupsByKey := make(map[string]*issueGroup)
+	for _, issue := range data.FinalValidation.Issues {
+		key := string(issue.Check) + "\x00" + issue.Code
+		group, ok := groupsByKey[key]
+		if !ok {
+			group = &issueGroup{
+				check:  issue.Check,
+				code:   issue.Code,
+				sample: issue,
+			}
+			groupsByKey[key] = group
+		}
+		group.count++
+	}
+
+	groups := make([]issueGroup, 0, len(groupsByKey))
+	for _, group := range groupsByKey {
+		groups = append(groups, *group)
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i].count != groups[j].count {
+			return groups[i].count > groups[j].count
+		}
+		if groups[i].check != groups[j].check {
+			return groups[i].check < groups[j].check
+		}
+		return groups[i].code < groups[j].code
+	})
+
+	shown := min(maxRows, len(groups))
+	lines := []string{
+		color(ansiRed, ansiBold, fmt.Sprintf("Issue detail showing %d of %d check/code group(s)", shown, len(groups))),
+	}
+	for i := 0; i < shown; i++ {
+		group := groups[i]
+		line := fmt.Sprintf("%s %s count=%d", group.check, group.code, group.count)
+		if location := validationIssueLocation(group.sample); location != "" {
+			line += " " + location
+		}
+		if group.sample.Message != "" {
+			line += " msg=" + group.sample.Message
+		}
+		lines = append(lines, truncate(line, 132))
+	}
+	if len(groups) > shown {
+		lines = append(lines, dim(fmt.Sprintf("%d more validation issue group(s) omitted", len(groups)-shown)))
+	}
+	return lines
+}
+
+func validationIssueLocation(issue ledgervalidator.Issue) string {
+	parts := make([]string, 0, 7)
+	if issue.AccountID != nil {
+		parts = append(parts, fmt.Sprintf("account=%d", *issue.AccountID))
+	}
+	if issue.TransactionID != nil {
+		parts = append(parts, fmt.Sprintf("txn=%d", *issue.TransactionID))
+	}
+	if issue.ExternalTransferID != nil {
+		parts = append(parts, fmt.Sprintf("external=%d", *issue.ExternalTransferID))
+	}
+	if issue.ReversalID != nil {
+		parts = append(parts, fmt.Sprintf("reversal=%d", *issue.ReversalID))
+	}
+	if issue.StoredAmount != nil {
+		parts = append(parts, fmt.Sprintf("stored=%d", *issue.StoredAmount))
+	}
+	if issue.DerivedAmount != nil {
+		parts = append(parts, fmt.Sprintf("derived=%d", *issue.DerivedAmount))
+	}
+	if issue.Delta != nil {
+		parts = append(parts, fmt.Sprintf("delta=%d", *issue.Delta))
+	}
+	return strings.Join(parts, " ")
 }
 
 func errorLine(stats StatsSnapshot, index int) string {

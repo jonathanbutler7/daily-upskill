@@ -199,6 +199,85 @@ func TestWriteTextEventRendersValidationExpectedAndActualCounts(t *testing.T) {
 	}
 }
 
+func TestWriteTextEventRendersValidationIssueDetails(t *testing.T) {
+	var output bytes.Buffer
+	accountID := int64(17)
+	transactionID := int64(42)
+	storedAmount := int64(100)
+	derivedAmount := int64(50)
+	delta := int64(50)
+
+	writeTextEvent(&output, finalEvent{
+		At: timeNowForTest(),
+		Summary: Summary{
+			RunID: "c65e7a50-8c44-4282-b318-4e2d9b6127af",
+			Config: SummaryConfig{
+				Reset:              true,
+				Accounts:           5,
+				Workers:            2,
+				Operations:         50,
+				MaxOpenConns:       6,
+				OperationTimeoutMS: 30000,
+			},
+			Stats: StatsSnapshot{
+				Total:                 50,
+				Success:               50,
+				RequestAttempts:       50,
+				ByOperation:           map[string]int64{"deposit": 8, "transfer": 34, "withdrawal": 8},
+				BySuccessfulOperation: map[string]int64{"deposit": 8, "transfer": 34, "withdrawal": 8},
+			},
+			FinalValidation: ledgervalidator.Result{
+				Healthy: false,
+				Summary: ledgervalidator.Summary{
+					AccountCount:          6,
+					TransactionCount:      55,
+					EntryCount:            110,
+					ExternalTransferCount: 21,
+					ReversalCount:         0,
+					IssueCount:            3,
+				},
+				Issues: []ledgervalidator.Issue{
+					{
+						Check:         ledgervalidator.CheckAccountBalances,
+						Code:          "account_balance_mismatch",
+						Message:       "account 17 stored balance 100 does not match derived balance 50",
+						AccountID:     &accountID,
+						StoredAmount:  &storedAmount,
+						DerivedAmount: &derivedAmount,
+						Delta:         &delta,
+					},
+					{
+						Check:         ledgervalidator.CheckTransactionShape,
+						Code:          "transaction_entry_shape_mismatch",
+						Message:       "posted transaction 42 has entries that do not match its from/to amount",
+						TransactionID: &transactionID,
+					},
+					{
+						Check:         ledgervalidator.CheckTransactionShape,
+						Code:          "transaction_entry_shape_mismatch",
+						Message:       "posted transaction 42 has entries that do not match its from/to amount",
+						TransactionID: &transactionID,
+					},
+				},
+			},
+			Healthy: false,
+		},
+	})
+
+	rendered := output.String()
+	for _, expected := range []string{
+		"Final audit failed",
+		"Issues              0          3",
+		"Issue detail showing 2 of 2 check/code group(s)",
+		"transaction_shape transaction_entry_shape_mismatch count=2 txn=42",
+		"account_balances account_balance_mismatch count=1 account=17 stored=100 derived=50 delta=50",
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("dashboard output missing %q:\n%s", expected, rendered)
+		}
+	}
+}
+
 func TestSummarizeDuplicateResultsRecordsIdempotentReplays(t *testing.T) {
 	collector := newCollector(timeNowForTest())
 

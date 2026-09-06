@@ -134,8 +134,8 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 
 	entries := []LedgerEntryInput{
-		{AccountID: fromAccountID, Amount: cmd.TransferAmount, Direction: EntryDirectionCredit},
-		{AccountID: toAccountID, Amount: cmd.TransferAmount, Direction: EntryDirectionDebit},
+		{AccountID: fromAccountID, Amount: cmd.TransferAmount, Direction: EntryDirectionDebit},
+		{AccountID: toAccountID, Amount: cmd.TransferAmount, Direction: EntryDirectionCredit},
 	}
 	for _, entry := range entries {
 		if err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
@@ -148,10 +148,10 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
+	if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
 		return 0, err
 	}
-	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
+	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
 		return 0, err
 	}
 

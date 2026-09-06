@@ -162,14 +162,16 @@ func checkTransactionBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Iss
 	const q = `
 		select
 			lt.id,
-			coalesce(sum(le.amount), 0) as entry_sum,
+			coalesce(sum(case when le.direction = 'debit' then le.amount else 0 end), 0) as debit_total,
+			coalesce(sum(case when le.direction = 'credit' then le.amount else 0 end), 0) as credit_total,
 			count(le.id) as entry_count
 		from ledger_transactions lt
 		left join ledger_entries le on le.transaction_id = lt.id
 			and le.archived = false
 		where lt.status = 'posted'
 		group by lt.id
-		having coalesce(sum(le.amount), 0) <> 0
+		having coalesce(sum(case when le.direction = 'debit' then le.amount else 0 end), 0)
+				<> coalesce(sum(case when le.direction = 'credit' then le.amount else 0 end), 0)
 			or count(le.id) = 0
 		order by lt.id
 		limit $1;
@@ -184,18 +186,22 @@ func checkTransactionBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Iss
 	var issues []Issue
 	for rows.Next() {
 		var transactionID int64
-		var entrySum int64
+		var debitTotal int64
+		var creditTotal int64
 		var entryCount int64
-		if err := rows.Scan(&transactionID, &entrySum, &entryCount); err != nil {
+		if err := rows.Scan(&transactionID, &debitTotal, &creditTotal, &entryCount); err != nil {
 			return nil, err
 		}
 
+		delta := debitTotal - creditTotal
 		issues = append(issues, Issue{
 			Check:         CheckTransactionBalances,
 			Code:          "transaction_not_balanced",
-			Message:       fmt.Sprintf("posted transaction %d has %d active entries with sum %d", transactionID, entryCount, entrySum),
+			Message:       fmt.Sprintf("posted transaction %d has %d active entries with debit total %d and credit total %d", transactionID, entryCount, debitTotal, creditTotal),
 			TransactionID: int64Ptr(transactionID),
-			Delta:         int64Ptr(entrySum),
+			StoredAmount:  int64Ptr(debitTotal),
+			DerivedAmount: int64Ptr(creditTotal),
+			Delta:         int64Ptr(delta),
 		})
 	}
 
@@ -204,25 +210,25 @@ func checkTransactionBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Iss
 
 func checkAccountBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, error) {
 	const q = `
-		select
-			la.id,
-			la.balance as stored_balance,
-			coalesce(sum(case
-				when lt.status = 'posted'
-					and le.archived = false then le.amount
+			select
+				la.id,
+				la.balance as stored_balance,
+				coalesce(sum(case
+					when lt.status = 'posted' and le.archived = false and le.direction = la.normal_balance then le.amount
+					when lt.status = 'posted' and le.archived = false then -le.amount
+					else 0
+				end), 0) as derived_balance
+			from ledger_accounts la
+			left join ledger_entries le on le.account_id = la.id
+			left join ledger_transactions lt on lt.id = le.transaction_id
+			group by la.id, la.balance, la.normal_balance
+			having la.balance <> coalesce(sum(case
+				when lt.status = 'posted' and le.archived = false and le.direction = la.normal_balance then le.amount
+				when lt.status = 'posted' and le.archived = false then -le.amount
 				else 0
-			end), 0) as derived_balance
-		from ledger_accounts la
-		left join ledger_entries le on le.account_id = la.id
-		left join ledger_transactions lt on lt.id = le.transaction_id
-		group by la.id, la.balance
-		having la.balance <> coalesce(sum(case
-			when lt.status = 'posted'
-				and le.archived = false then le.amount
-			else 0
-		end), 0)
-		order by la.id
-		limit $1;
+			end), 0)
+			order by la.id
+			limit $1;
 	`
 
 	rows, err := tx.QueryContext(ctx, q, limit)
@@ -268,9 +274,11 @@ func checkTransactionShape(ctx context.Context, tx *sql.Tx, limit int) ([]Issue,
 		group by lt.id
 		having count(le.id) <> 2
 			or sum(case when le.account_id = lt.from_account_id
-				and le.amount = -lt.amount then 1 else 0 end) <> 1
+				and le.amount = lt.amount
+				and le.direction = 'debit' then 1 else 0 end) <> 1
 			or sum(case when le.account_id = lt.to_account_id
-				and le.amount = lt.amount then 1 else 0 end) <> 1
+				and le.amount = lt.amount
+				and le.direction = 'credit' then 1 else 0 end) <> 1
 		order by lt.id
 		limit $1;
 	`
@@ -361,27 +369,32 @@ func checkExternalTransfers(ctx context.Context, tx *sql.Tx, limit int) ([]Issue
 
 func checkReversals(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, error) {
 	const q = `
-		with original_entries as (
+		with expected_reversal_entries as (
 			select
 				lr.id as reversal_id,
 				lr.reversal_transaction_id,
 				le.account_id,
+				case le.direction
+					when 'debit' then 'credit'
+					when 'credit' then 'debit'
+				end as direction,
 				sum(le.amount) as amount
 			from ledger_reversals lr
 			join ledger_entries le on le.transaction_id = lr.original_transaction_id
 			where le.archived = false
-			group by lr.id, lr.reversal_transaction_id, le.account_id
+			group by lr.id, lr.reversal_transaction_id, le.account_id, le.direction
 		),
 		reversal_entries as (
 			select
 				lr.id as reversal_id,
 				lr.reversal_transaction_id,
 				le.account_id,
+				le.direction,
 				sum(le.amount) as amount
 			from ledger_reversals lr
 			join ledger_entries le on le.transaction_id = lr.reversal_transaction_id
 			where le.archived = false
-			group by lr.id, lr.reversal_transaction_id, le.account_id
+			group by lr.id, lr.reversal_transaction_id, le.account_id, le.direction
 		),
 		entry_mismatches as (
 			select
@@ -390,11 +403,12 @@ func checkReversals(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, error)
 				coalesce(o.account_id, r.account_id) as account_id,
 				coalesce(o.amount, 0) as original_amount,
 				coalesce(r.amount, 0) as reversal_amount
-			from original_entries o
+			from expected_reversal_entries o
 			full outer join reversal_entries r
 				on r.reversal_id = o.reversal_id
 				and r.account_id = o.account_id
-			where coalesce(o.amount, 0) + coalesce(r.amount, 0) <> 0
+				and r.direction = o.direction
+			where coalesce(o.amount, 0) <> coalesce(r.amount, 0)
 		),
 		header_mismatches as (
 			select
@@ -410,6 +424,8 @@ func checkReversals(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, error)
 				or reversal.status <> 'posted'
 				or reversal.amount <> original.amount
 				or reversal.currency_code <> original.currency_code
+				or reversal.from_account_id <> original.to_account_id
+				or reversal.to_account_id <> original.from_account_id
 		)
 		select
 			reversal_id,
@@ -446,12 +462,12 @@ func checkReversals(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, error)
 		issue := Issue{
 			Check:         CheckReversals,
 			Code:          "reversal_mismatch",
-			Message:       fmt.Sprintf("reversal %d does not fully negate transaction state", reversalID),
+			Message:       fmt.Sprintf("reversal %d does not fully reverse transaction state", reversalID),
 			ReversalID:    int64Ptr(reversalID),
 			TransactionID: int64Ptr(transactionID),
 			StoredAmount:  int64Ptr(reversalAmount),
-			DerivedAmount: int64Ptr(-originalAmount),
-			Delta:         int64Ptr(originalAmount + reversalAmount),
+			DerivedAmount: int64Ptr(originalAmount),
+			Delta:         int64Ptr(reversalAmount - originalAmount),
 		}
 		if accountID.Valid {
 			issue.AccountID = int64Ptr(accountID.Int64)

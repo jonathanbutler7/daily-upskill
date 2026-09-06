@@ -114,10 +114,10 @@ func PostTransfer(ctx context.Context, db *sql.DB, cmd PostTransferCommand) (Tra
 		return 0, err
 	}
 
-	if err := adjustAccountBalance(ctx, tx, cmd.FromAccountID, cmd.Amount, EntryDirectionCredit); err != nil {
+	if err := adjustAccountBalance(ctx, tx, cmd.FromAccountID, cmd.Amount, EntryDirectionDebit); err != nil {
 		return 0, err
 	}
-	if err := adjustAccountBalance(ctx, tx, cmd.ToAccountID, cmd.Amount, EntryDirectionDebit); err != nil {
+	if err := adjustAccountBalance(ctx, tx, cmd.ToAccountID, cmd.Amount, EntryDirectionCredit); err != nil {
 		return 0, err
 	}
 

@@ -70,8 +70,8 @@ func TestValidateReportsTransactionBalanceAndShapeIssues(t *testing.T) {
 		values
 			('transfer', 'bad-transfer', 2, 3, 100, 'USD');
 
-		insert into ledger_entries (transaction_id, account_id, amount)
-		values (1, 2, -100);
+		insert into ledger_entries (transaction_id, account_id, amount, direction)
+		values (1, 2, 100, 'debit');
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -118,12 +118,12 @@ func TestValidateReportsReversalMismatch(t *testing.T) {
 			('transfer', 'original-transfer', 2, 3, 100, 'USD'),
 			('reversal', 'bad-reversal', 3, 2, 100, 'USD');
 
-		insert into ledger_entries (transaction_id, account_id, amount)
+		insert into ledger_entries (transaction_id, account_id, amount, direction)
 		values
-			(1, 2, -100),
-			(1, 3, 100),
-			(2, 2, 50),
-			(2, 3, -50);
+			(1, 2, 100, 'debit'),
+			(1, 3, 100, 'credit'),
+			(2, 2, 50, 'credit'),
+			(2, 3, 50, 'credit');
 
 		insert into ledger_reversals
 			(original_transaction_id, reversal_transaction_id, reason)
@@ -191,22 +191,22 @@ func seedValidLedger(t *testing.T, ctx context.Context, db *sql.DB) {
 			('transfer', 'alice-sends-bob-1000', 2, 3, 1000, 'USD'),
 			('reversal', 'reverse-alice-sends-bob-1000', 3, 2, 1000, 'USD');
 
-		insert into ledger_entries (transaction_id, account_id, amount)
+		insert into ledger_entries (transaction_id, account_id, amount, direction)
 		values
-			(1, 1, -2000),
-			(1, 2, 2000),
-			(2, 2, -1000),
-			(2, 3, 1000),
-			(3, 2, 1000),
-			(3, 3, -1000);
+			(1, 1, 2000, 'debit'),
+			(1, 2, 2000, 'credit'),
+			(2, 2, 1000, 'debit'),
+			(2, 3, 1000, 'credit'),
+			(3, 2, 1000, 'credit'),
+			(3, 3, 1000, 'debit');
 
 		update ledger_accounts
-		set balance = case id
-			when 1 then -2000
-			when 2 then 2000
-			when 3 then 0
-			else balance
-		end;
+			set balance = case id
+				when 1 then 2000
+				when 2 then 2000
+				when 3 then 0
+				else balance
+			end;
 
 		insert into external_transfers (
 			direction,

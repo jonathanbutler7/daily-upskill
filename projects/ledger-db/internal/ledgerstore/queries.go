@@ -188,12 +188,24 @@ func adjustAccountBalance(
 	tx *sql.Tx,
 	accountID AccountID,
 	amountDelta Amount,
+	entryDirection EntryDirection,
 ) error {
-	const q = `
+	const creditQ = `
 		update ledger_accounts
 		set balance = balance + $1
 		where id = $2 and balance >= $1;
 	`
+	const debitQ = `
+		update ledger_accounts
+		set balance = balance - $1
+		where id = $2 and balance >= $1;
+	`
+	var q string
+	if entryDirection == EntryDirectionCredit {
+		q = creditQ
+	} else if entryDirection == EntryDirectionDebit {
+		q = debitQ
+	}
 
 	_, err := tx.ExecContext(ctx, q, amountDelta, accountID)
 	return err
@@ -201,16 +213,20 @@ func adjustAccountBalance(
 
 func verifyTransactionBalances(ctx context.Context, tx *sql.Tx, transactionID TransactionID) error {
 	const q = `
-		select coalesce(sum(amount), 0)
+		select
+			coalesce(sum(case when direction = 'debit' then amount else 0 end), 0) as debit_total,
+			coalesce(sum(case when direction = 'credit' then amount else 0 end), 0) as credit_total
 		from ledger_entries
 		where transaction_id = $1;
 	`
-	var sum int64
-	err := tx.QueryRowContext(ctx, q, transactionID).Scan(&sum)
+
+	var debitTotal int64
+	var creditTotal int64
+	err := tx.QueryRowContext(ctx, q, transactionID).Scan(&debitTotal, &creditTotal)
 	if err != nil {
 		return err
 	}
-	if sum != 0 {
+	if debitTotal != creditTotal {
 		return ErrTransactionNotBalanced
 	}
 	return nil
@@ -255,6 +271,35 @@ func lockSettlementAccountForUpdate(
 	}
 
 	return settlementAccountID, nil
+}
+
+func getAccountById(
+	ctx context.Context,
+	tx *sql.Tx,
+	accountId AccountID,
+) (Account, error) {
+	const q = `
+		select *
+		from ledger_accounts
+		where id = $1;
+	`
+
+	var account Account
+	err := tx.QueryRowContext(ctx, q, accountId).Scan(&account)
+	if err != nil {
+		return Account{}, err
+	}
+	return Account{
+		ID:             account.ID,
+		Name:           account.Name,
+		Description:    account.Description,
+		CurrencyCode:   account.CurrencyCode,
+		NormalBalance:  account.NormalBalance,
+		LedgerableType: account.LedgerableType,
+		LockVersion:    account.LockVersion,
+		Balance:        account.Balance,
+		CreatedAt:      account.CreatedAt,
+	}, nil
 }
 
 func getCashSettlementAccountId(
@@ -313,11 +358,11 @@ func insertLedgerEntry(
 	}
 
 	const q = `
-		insert into ledger_entries (transaction_id, account_id, amount)
-		values ($1, $2, $3);
+		insert into ledger_entries (transaction_id, account_id, amount, direction)
+		values ($1, $2, $3, $4);
 	`
 
-	if _, err := tx.ExecContext(ctx, q, transactionID, entry.AccountID, entry.Amount); err != nil {
+	if _, err := tx.ExecContext(ctx, q, transactionID, entry.AccountID, entry.Amount, entry.Direction); err != nil {
 		return err
 	}
 

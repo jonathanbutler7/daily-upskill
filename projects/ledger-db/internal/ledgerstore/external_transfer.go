@@ -45,20 +45,23 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	// 	return 0, err
 	// }
 
+	// account, err := getAccountById(ctx, tx, cmd.UserAccountID)
+
 	cashSettlementAccountId, err := getCashSettlementAccountId(ctx, tx, CurrencyCode("USD"))
 	if err != nil {
 		return 0, err
 	}
+
 	toAccountCurrency := CurrencyCode("USD")
 
 	var fromAccountID AccountID
 	var toAccountID AccountID
 
-	if cmd.ExternalTransferDirection == ExternalTransferDirectionDeposit {
+	if isDeposit {
 		fromAccountID = cashSettlementAccountId
 		toAccountID = cmd.UserAccountID
 	}
-	if cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal {
+	if isWithdrawal {
 		fromAccountID = cmd.UserAccountID
 		toAccountID = cashSettlementAccountId
 	}
@@ -86,16 +89,16 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, ErrIdempotencyConflict
 	}
 
-	if cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal {
-		balance, _, err := lockAccountForUpdate(ctx, tx, cmd.UserAccountID)
-		if err != nil {
-			return 0, err
-		}
-		err = checkBalance(balance, cmd.TransferAmount)
-		if err != nil {
-			return 0, err
-		}
-	}
+	// if cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal {
+	// 	balance, _, err := lockAccountForUpdate(ctx, tx, cmd.UserAccountID)
+	// 	if err != nil {
+	// 		return 0, err
+	// 	}
+	// 	err = checkBalance(balance, cmd.TransferAmount)
+	// 	if err != nil {
+	// 		return 0, err
+	// 	}
+	// }
 
 	transactionID, err = insertLedgerTransaction(
 		ctx,
@@ -131,8 +134,8 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 
 	entries := []LedgerEntryInput{
-		{AccountID: fromAccountID, Amount: -cmd.TransferAmount},
-		{AccountID: toAccountID, Amount: cmd.TransferAmount},
+		{AccountID: fromAccountID, Amount: cmd.TransferAmount, Direction: EntryDirectionCredit},
+		{AccountID: toAccountID, Amount: cmd.TransferAmount, Direction: EntryDirectionDebit},
 	}
 	for _, entry := range entries {
 		if err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
@@ -145,10 +148,10 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-	if err := adjustAccountBalance(ctx, tx, fromAccountID, -cmd.TransferAmount); err != nil {
+	if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
 		return 0, err
 	}
-	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount); err != nil {
+	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
 		return 0, err
 	}
 

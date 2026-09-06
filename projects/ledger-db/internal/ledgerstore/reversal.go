@@ -80,7 +80,7 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 	}
 
 	for _, entry := range reversalEntries {
-		if err := adjustAccountBalance(ctx, tx, entry.AccountID, entry.Amount); err != nil {
+		if err := adjustAccountBalance(ctx, tx, entry.AccountID, entry.Amount, EntryDirectionDebit); err != nil {
 			return 0, err
 		}
 	}

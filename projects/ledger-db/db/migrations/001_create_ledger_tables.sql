@@ -39,6 +39,7 @@ create table ledger_entries (
     transaction_id bigint not null references ledger_transactions(id),
     account_id bigint not null references ledger_accounts(id),
     amount bigint not null check (amount <> 0),
+    direction text not null check(direction in ('credit', 'debit')),
     archived boolean not null default false,
     archived_at timestamptz,
     created_at timestamptz not null default now()

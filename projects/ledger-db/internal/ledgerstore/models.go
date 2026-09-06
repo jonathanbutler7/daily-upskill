@@ -1,5 +1,7 @@
 package ledgerstore
 
+import "time"
+
 // Named types for values that cross ledgerstore helper boundaries.
 type AccountID int64
 type TransactionID int64
@@ -12,6 +14,9 @@ type ExternalTransferDirection string
 type ExternalTransferStatus string
 type LedgerTransactionType string
 type Reason string
+type NormalBalance string
+type EntryDirection string
+type LedgerableType string
 
 const (
 	LedgerTransactionTypeTransfer LedgerTransactionType = "transfer"
@@ -25,6 +30,15 @@ const (
 	ExternalTransferStatusPending  ExternalTransferStatus = "pending"
 	ExternalTransferStatusFailed   ExternalTransferStatus = "failed"
 	ExternalTransferStatusCanceled ExternalTransferStatus = "canceled"
+
+	NormalBalanceCredit NormalBalance = "credit"
+	NormalBalanceDebit  NormalBalance = "debit"
+
+	LedgerableTypeExternalAccount LedgerableType = "external_account"
+	LedgerableTypeInternalAccount LedgerableType = "internal_account"
+
+	EntryDirectionCredit EntryDirection = "credit"
+	EntryDirectionDebit  EntryDirection = "debit"
 )
 
 type TransferCommand struct {
@@ -68,15 +82,29 @@ type Transaction struct {
 	CurrencyCode   CurrencyCode
 }
 
+type Account struct {
+	ID             AccountID
+	Name           string
+	Description    string
+	CurrencyCode   CurrencyCode
+	NormalBalance  NormalBalance
+	LedgerableType LedgerableType
+	LockVersion    int64
+	Balance        int64
+	CreatedAt      time.Time
+}
+
 type Entry struct {
-	ID            int64
-	TransactionID TransactionID
-	AccountID     AccountID
-	Amount        Amount
-	CreatedAt     string
+	ID             int64
+	TransactionID  TransactionID
+	AccountID      AccountID
+	Amount         Amount
+	CreatedAt      string
+	EntryDirection EntryDirection
 }
 
 type LedgerEntryInput struct {
 	AccountID AccountID
 	Amount    Amount
+	Direction EntryDirection
 }

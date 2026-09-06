@@ -19,6 +19,7 @@ func lockAccountForUpdate(ctx context.Context, tx *sql.Tx, accountID AccountID) 
 	// and realizing i don't totally understand the intent.
 	// i'll either get an understanding about it from an
 	// agent or just ask him some time.
+	//
 	// update accounts
 	// set balance = balance - 50
 	// where id = ___
@@ -191,7 +192,7 @@ func adjustAccountBalance(
 	const q = `
 		update ledger_accounts
 		set balance = balance + $1
-		where id = $2;
+		where id = $2 and balance >= $1;
 	`
 
 	_, err := tx.ExecContext(ctx, q, amountDelta, accountID)
@@ -254,6 +255,26 @@ func lockSettlementAccountForUpdate(
 	}
 
 	return settlementAccountID, nil
+}
+
+func getCashSettlementAccountId(
+	ctx context.Context,
+	tx *sql.Tx,
+	currencyCode CurrencyCode,
+) (AccountID, error) {
+	const q = `
+		select id
+		from ledger_accounts
+		where name = 'Cash Settlement'
+			and currency_code = $1;
+	`
+	var accountID int64
+	err := tx.QueryRowContext(ctx, q, currencyCode).Scan(&accountID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrCashSettlementAccountNotFound
+	}
+
+	return AccountID(accountID), nil
 }
 
 func lockCashSettlementAccountForUpdate(

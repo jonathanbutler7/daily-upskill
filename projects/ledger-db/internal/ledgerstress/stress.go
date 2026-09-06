@@ -443,8 +443,8 @@ func seedAccounts(ctx context.Context, db *sql.DB, runLabel string, config Confi
 		profile := fakeStressAccount(i)
 		var accountID int64
 		err := db.QueryRowContext(ctx, `
-			insert into ledger_accounts (name, description, currency_code, balance)
-			values ($1, $2, 'USD', 0)
+			insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
+			values ($1, $2, 'USD', 'credit', 'internal_account', 0)
 			returning id;
 		`,
 			profile.Name,

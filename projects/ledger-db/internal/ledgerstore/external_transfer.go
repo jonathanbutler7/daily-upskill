@@ -35,15 +35,21 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 	defer tx.Rollback()
 
-	toAccountCurrency, err := lockToAccountCurrencyForUpdate(ctx, tx, cmd.UserAccountID)
-	if err != nil {
-		return 0, err
-	}
+	// toAccountCurrency, err := lockToAccountCurrencyForUpdate(ctx, tx, cmd.UserAccountID)
+	// if err != nil {
+	// 	return 0, err
+	// }
 
-	cashSettlementAccountId, err := lockSettlementAccountForUpdate(ctx, tx, cmd.SettlementAccountID, toAccountCurrency)
+	// cashSettlementAccountId, err := lockSettlementAccountForUpdate(ctx, tx, cmd.SettlementAccountID, toAccountCurrency)
+	// if err != nil {
+	// 	return 0, err
+	// }
+
+	cashSettlementAccountId, err := getCashSettlementAccountId(ctx, tx, CurrencyCode("USD"))
 	if err != nil {
 		return 0, err
 	}
+	toAccountCurrency := CurrencyCode("USD")
 
 	var fromAccountID AccountID
 	var toAccountID AccountID

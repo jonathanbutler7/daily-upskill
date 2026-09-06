@@ -13,6 +13,9 @@ create table ledger_accounts (
     name text not null,
     description text not null,
     currency_code char(3) not null,
+    normal_balance text check(normal_balance in ('credit', 'debit')),
+    ledgerable_type text check(ledgerable_type in ('external_account', 'internal_account')),
+    lock_version bigint not null default 0,
     balance bigint not null default 0,
     created_at timestamptz not null default now()
 );

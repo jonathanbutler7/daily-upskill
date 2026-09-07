@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 )
 
 // A function to handle both depositing funds into the ledger-db
@@ -15,31 +14,8 @@ import (
 // the money will move, and then it handles assigning the values
 // and transferring money accordingly.
 func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTransferCommand) (TransactionID, error) {
-	if cmd.TransferAmount <= 0 {
-		return 0, ErrAmountGreaterThanZero
-	}
-	if cmd.IdempotencyKey == "" {
-		return 0, ErrIdempotencyKeyRequired
-	}
-	if cmd.Rail == "" {
-		return 0, ErrRailValueRequired
-	}
-	if strings.TrimSpace(string(cmd.ExternalReference)) == "" {
-		return 0, ErrExternalReferenceRequired
-	}
-
 	isDeposit := cmd.ExternalTransferDirection == ExternalTransferDirectionDeposit
 	isWithdrawal := cmd.ExternalTransferDirection == ExternalTransferDirectionWithdrawal
-
-	if !isDeposit && !isWithdrawal {
-		return 0, ErrMustBeWithdrawalOrDeposit
-	}
-	if cmd.UserAccountID == 0 {
-		if isWithdrawal {
-			return 0, ErrFromAccountIDRequired
-		}
-		return 0, ErrToAccountIDRequired
-	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -49,9 +25,6 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 
 	userAccount, err := getAccountById(ctx, tx, cmd.UserAccountID)
 	if errors.Is(err, ErrNoRowsFound) {
-		if isWithdrawal {
-			return 0, ErrFromAccountNotFound
-		}
 		return 0, ErrToAccountNotFound
 	}
 	if err != nil {
@@ -174,6 +147,18 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	); err != nil {
 		return 0, err
 	}
+
+
+	if err := insertOutboxEvent(
+		ctx, tx,
+		"ledger_transaction",
+		int64(transactionID),
+		"ledger.transaction.posted",
+		"{\"payload\":\"payload\"}",
+	); err != nil {
+		return 0, err
+	}
+
 
 	if err := tx.Commit(); err != nil {
 		return 0, err

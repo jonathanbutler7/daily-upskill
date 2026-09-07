@@ -12,6 +12,7 @@ var LocalSchemaMigrations = []string{
 	"002_create_external_transfers.sql",
 	"003_seed_system_accounts.sql",
 	"006_prevent_entry_mutations.sql",
+	"007_add_outbox_table.sql",
 }
 
 func ApplyLocalSchema(ctx context.Context, db *sql.DB, migrationsDir string) error {

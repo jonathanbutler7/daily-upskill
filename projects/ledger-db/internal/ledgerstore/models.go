@@ -5,6 +5,7 @@ import "time"
 // Named types for values that cross ledgerstore helper boundaries.
 type AccountID int64
 type TransactionID int64
+type ReversalID int64
 type Amount int64
 type CurrencyCode string
 type IdempotencyKey string

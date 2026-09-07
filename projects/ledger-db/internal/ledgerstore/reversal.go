@@ -7,20 +7,18 @@ import (
 )
 
 func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (TransactionID, error) {
-	if cmd.TransactionID == 0 {
-		return 0, ErrTransactionIDRequired
-	}
-	if cmd.IdempotencyKey == "" {
-		return 0, ErrIdempotencyKeyRequired
-	}
-
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
 
-	transaction, err := findAndLockOriginalTransaction(ctx, tx, cmd.TransactionID)
+	transaction, err := getTransactionById(ctx, tx, cmd.TransactionID)
+	if err != nil {
+		return 0, err
+	}
+
+	cashSettlementAccountId, err := getCashSettlementAccountId(ctx, tx, CurrencyCode("USD"))
 	if err != nil {
 		return 0, err
 	}
@@ -77,8 +75,22 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 		}
 	}
 
-	if err := insertLedgerReversal(ctx, tx, cmd.TransactionID, reversalTransactionID, cmd.Reason); err != nil {
+	reversalRowId, err := insertLedgerReversal(ctx, tx, cmd.TransactionID, reversalTransactionID, cmd.Reason)
+	if err != nil {
 		return 0, err
+	}
+
+	if transaction.ToAccountID == cashSettlementAccountId || transaction.FromAccountID == cashSettlementAccountId {
+		err := insertOutboxEvent(
+			ctx, tx,
+			"ledger_reversal",
+			int64(reversalRowId),
+			"ledger.transaction.reversed",
+			"{\"payload\":\"payload\"}",
+		)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -95,7 +107,7 @@ func oppositeEntryDirection(direction EntryDirection) EntryDirection {
 	return EntryDirectionDebit
 }
 
-func insertLedgerReversal(ctx context.Context, tx *sql.Tx, originalTransactionID TransactionID, reversalTransactionID TransactionID, reason Reason) error {
+func insertLedgerReversal(ctx context.Context, tx *sql.Tx, originalTransactionID TransactionID, reversalTransactionID TransactionID, reason Reason) (ReversalID, error) {
 	const q = `
 		insert into ledger_reversals
 			(original_transaction_id, reversal_transaction_id, reason)
@@ -103,16 +115,19 @@ func insertLedgerReversal(ctx context.Context, tx *sql.Tx, originalTransactionID
 			($1, $2, $3);
 	`
 
-	_, err := tx.ExecContext(ctx, q, originalTransactionID, reversalTransactionID, reason)
-	return err
+	insertResult, err := tx.ExecContext(ctx, q, originalTransactionID, reversalTransactionID, reason)
+	if err != nil {
+		return 0, err
+	}
+	insertId, err := insertResult.LastInsertId()
+	return ReversalID(insertId), err
 }
 
-func findAndLockOriginalTransaction(ctx context.Context, tx *sql.Tx, transactionID TransactionID) (Transaction, error) {
+func getTransactionById(ctx context.Context, tx *sql.Tx, transactionID TransactionID) (Transaction, error) {
 	const q = `
 		select id, type, idempotency_key, created_at::text, from_account_id, to_account_id, amount, currency_code
 		from ledger_transactions
-		where id = $1
-		for update;
+		where id = $1;
 	`
 
 	var transaction Transaction

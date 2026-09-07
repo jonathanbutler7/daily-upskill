@@ -262,31 +262,6 @@ func lockToAccountCurrencyForUpdate(
 	return CurrencyCode(currencyCode), nil
 }
 
-// Locate the internal settlement account
-func lockSettlementAccountForUpdate(
-	ctx context.Context,
-	tx *sql.Tx,
-	settlementAccountID AccountID,
-	currencyCode CurrencyCode,
-) (AccountID, error) {
-	if settlementAccountID == 0 {
-		return lockCashSettlementAccountForUpdate(ctx, tx, currencyCode)
-	}
-
-	_, settlementCurrency, err := lockAccountForUpdate(ctx, tx, settlementAccountID)
-	if errors.Is(err, ErrNoRowsFound) {
-		return 0, ErrCashSettlementAccountNotFound
-	}
-	if err != nil {
-		return 0, err
-	}
-	if settlementCurrency != currencyCode {
-		return 0, ErrCurrencyMismatch
-	}
-
-	return settlementAccountID, nil
-}
-
 func getAccountById(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -375,31 +350,6 @@ func getCashSettlementAccountId(
 	return AccountID(accountID), nil
 }
 
-func lockCashSettlementAccountForUpdate(
-	ctx context.Context,
-	tx *sql.Tx,
-	currencyCode CurrencyCode,
-) (AccountID, error) {
-	const q = `
-		select id
-		from ledger_accounts
-		where name = 'Cash Settlement'
-			and currency_code = $1
-		for update;
-	`
-
-	var fundingAccountID int64
-	err := tx.QueryRowContext(ctx, q, currencyCode).Scan(&fundingAccountID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, ErrCashSettlementAccountNotFound
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	return AccountID(fundingAccountID), nil
-}
-
 func insertLedgerEntry(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -471,6 +421,40 @@ func insertExternalTransfer(
 		transferAmount,
 		toCurrency,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoRowsFound
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func insertOutboxEvent(
+	ctx context.Context,
+	tx *sql.Tx,
+	sourceType string,
+	sourceId int64,
+	eventType string,
+	payload any,
+) error {
+	const q = `
+		insert into outbox_events (
+			occurred_at,
+			source_type,
+			source_id,
+			event_type,
+			payload
+		)
+		values (
+			now(),
+			$1,
+			$2,
+			$3,
+			$4
+		)
+	`
+	_, err := tx.ExecContext(ctx, q, sourceType, sourceId, eventType, payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNoRowsFound
 	}

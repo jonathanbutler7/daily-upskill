@@ -3,7 +3,6 @@ drop function if exists post_transfer(bigint, bigint, bigint, text);
 
 drop table if exists external_transfers;
 drop table if exists ledger_reversals;
-drop table if exists settlement_update_jobs;
 drop table if exists ledger_entries;
 drop table if exists ledger_transactions;
 drop table if exists ledger_accounts;

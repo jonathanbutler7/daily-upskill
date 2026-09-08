@@ -12,37 +12,6 @@ PostTransfer SQL helper functions
 
 *****************/
 
-// 0 Look up and lock an account
-func lockAccountForUpdate(ctx context.Context, tx *sql.Tx, accountID AccountID) (Amount, CurrencyCode, error) {
-	// jan (new employee at weave) suggested this as
-	// an alternative to row locks. i am reading it now
-	// and realizing i don't totally understand the intent.
-	// i'll either get an understanding about it from an
-	// agent or just ask him some time.
-	//
-	// update accounts
-	// set balance = balance - 50
-	// where id = ___
-	// and balance > 50
-	const q = `
-		select balance, currency_code
-		from ledger_accounts
-		where id = $1
-		for update;
-	`
-
-	var balance int64
-	var currencyCode string
-	err := tx.QueryRowContext(ctx, q, accountID).Scan(&balance, &currencyCode)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, "", ErrNoRowsFound
-	}
-	if err != nil {
-		return 0, "", err
-	}
-	return Amount(balance), CurrencyCode(currencyCode), nil
-}
-
 // 2 Check currencies match
 func checkCurrencyMatch(fromCurrency, toCurrency CurrencyCode) error {
 	if fromCurrency != toCurrency {
@@ -244,22 +213,6 @@ func verifyTransactionBalances(ctx context.Context, tx *sql.Tx, transactionID Tr
 		return ErrTransactionNotBalanced
 	}
 	return nil
-}
-
-// Validate the to_account_id exists and lock row
-func lockToAccountCurrencyForUpdate(
-	ctx context.Context,
-	tx *sql.Tx,
-	toAccountID AccountID,
-) (CurrencyCode, error) {
-	_, currencyCode, err := lockAccountForUpdate(ctx, tx, toAccountID)
-	if errors.Is(err, ErrNoRowsFound) {
-		return "", ErrToAccountNotFound
-	}
-	if err != nil {
-		return "", err
-	}
-	return CurrencyCode(currencyCode), nil
 }
 
 func getAccountById(

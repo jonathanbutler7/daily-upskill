@@ -154,7 +154,6 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		"ledger_transaction",
 		int64(transactionID),
 		"ledger.transaction.posted",
-		"{\"payload\":\"payload\"}",
 	); err != nil {
 		return 0, err
 	}

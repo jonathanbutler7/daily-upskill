@@ -86,7 +86,6 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 			"ledger_reversal",
 			int64(reversalRowId),
 			"ledger.transaction.reversed",
-			"{\"payload\":\"payload\"}",
 		)
 		if err != nil {
 			return 0, err
@@ -112,15 +111,16 @@ func insertLedgerReversal(ctx context.Context, tx *sql.Tx, originalTransactionID
 		insert into ledger_reversals
 			(original_transaction_id, reversal_transaction_id, reason)
 		values
-			($1, $2, $3);
+			($1, $2, $3)
+		returning id;
 	`
 
-	insertResult, err := tx.ExecContext(ctx, q, originalTransactionID, reversalTransactionID, reason)
-	if err != nil {
+	var reversalID int64
+	if err := tx.QueryRowContext(ctx, q, originalTransactionID, reversalTransactionID, reason).Scan(&reversalID); err != nil {
 		return 0, err
 	}
-	insertId, err := insertResult.LastInsertId()
-	return ReversalID(insertId), err
+
+	return ReversalID(reversalID), nil
 }
 
 func getTransactionById(ctx context.Context, tx *sql.Tx, transactionID TransactionID) (Transaction, error) {

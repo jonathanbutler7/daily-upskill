@@ -389,25 +389,22 @@ func insertOutboxEvent(
 	sourceType string,
 	sourceId int64,
 	eventType string,
-	payload any,
 ) error {
 	const q = `
 		insert into outbox_events (
 			occurred_at,
 			source_type,
 			source_id,
-			event_type,
-			payload
+			event_type
 		)
 		values (
 			now(),
 			$1,
 			$2,
-			$3,
-			$4
+			$3
 		)
 	`
-	_, err := tx.ExecContext(ctx, q, sourceType, sourceId, eventType, payload)
+	_, err := tx.ExecContext(ctx, q, sourceType, sourceId, eventType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNoRowsFound
 	}

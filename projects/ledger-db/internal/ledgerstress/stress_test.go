@@ -281,13 +281,16 @@ func TestWriteTextEventRendersValidationIssueDetails(t *testing.T) {
 func TestSummarizeDuplicateResultsRecordsIdempotentReplays(t *testing.T) {
 	collector := newCollector(timeNowForTest())
 
-	err := summarizeDuplicateResults("transfer", []requestResult{
+	transactionID, err := summarizeDuplicateResults("transfer", []requestResult{
 		{transactionID: 42},
 		{transactionID: 42},
 		{transactionID: 42},
 	}, collector)
 	if err != nil {
 		t.Fatalf("summarizeDuplicateResults returned error: %v", err)
+	}
+	if transactionID != 42 {
+		t.Fatalf("transaction ID = %d, want 42", transactionID)
 	}
 
 	snapshot := collector.snapshot()
@@ -302,7 +305,7 @@ func TestSummarizeDuplicateResultsRecordsIdempotentReplays(t *testing.T) {
 func TestSummarizeDuplicateResultsRejectsDifferentTransactionIDs(t *testing.T) {
 	collector := newCollector(timeNowForTest())
 
-	err := summarizeDuplicateResults("transfer", []requestResult{
+	_, err := summarizeDuplicateResults("transfer", []requestResult{
 		{transactionID: 42},
 		{transactionID: 43},
 	}, collector)
@@ -332,6 +335,42 @@ func TestRandomAccountPairCanRouteToHotAccounts(t *testing.T) {
 		if from == to {
 			t.Fatalf("expected distinct accounts, got %d", from)
 		}
+	}
+}
+
+func TestNewOperationPlanCanSelectReversalTarget(t *testing.T) {
+	targets := &transactionPool{}
+	targets.add(42)
+	workerCtx := workerContext{
+		runLabel:        "c65e7a50",
+		accounts:        []ledgerstore.AccountID{10, 11},
+		config:          Config{MaxAmount: 100, ReversalPercent: 100},
+		reversalTargets: targets,
+	}
+
+	plan := newOperationPlan(1, 1, 1, rand.New(rand.NewSource(1)), workerCtx)
+	if plan.operation != "reversal" {
+		t.Fatalf("operation = %q, want reversal", plan.operation)
+	}
+	if plan.transactionID != 42 {
+		t.Fatalf("target transaction ID = %d, want 42", plan.transactionID)
+	}
+	if _, ok := targets.take(rand.New(rand.NewSource(1))); ok {
+		t.Fatalf("reversal target should be removed after selection")
+	}
+}
+
+func TestNewOperationPlanFallsBackWhenNoReversalTargetExists(t *testing.T) {
+	workerCtx := workerContext{
+		runLabel:        "c65e7a50",
+		accounts:        []ledgerstore.AccountID{10, 11},
+		config:          Config{MaxAmount: 100, ReversalPercent: 100},
+		reversalTargets: &transactionPool{},
+	}
+
+	plan := newOperationPlan(1, 1, 1, rand.New(rand.NewSource(1)), workerCtx)
+	if plan.operation == "reversal" {
+		t.Fatalf("operation should fall back when no reversal target exists")
 	}
 }
 

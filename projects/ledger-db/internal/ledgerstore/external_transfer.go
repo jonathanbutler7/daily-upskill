@@ -23,15 +23,11 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	}
 	defer tx.Rollback()
 
-	userAccount, err := getAccountById(ctx, tx, cmd.UserAccountID)
-	if errors.Is(err, ErrNoRowsFound) {
-		return 0, ErrToAccountNotFound
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	toAccountCurrency := userAccount.CurrencyCode
+	// We have a getAccountById query that can return the
+	// currency code per account, but right now there's no point
+	// in doing that because this ledger is not handling
+	// currency or conversions.
+	toAccountCurrency := CurrencyCode("USD")
 
 	cashSettlementAccountId, err := getSettlementAccountId(ctx, tx, cmd.SettlementAccountID, toAccountCurrency)
 	if err != nil {
@@ -120,12 +116,19 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	if err != nil {
 		return 0, err
 	}
-
-	if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
-		return 0, err
+	
+	// Only adjust the account balance of the non cash 
+	// settlement account. Cash settlement account
+	if isWithdrawal {
+		if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
+			return 0, err
+		}
 	}
-	if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
-		return 0, err
+
+	if isDeposit {
+		if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
+			return 0, err
+		}
 	}
 
 	if err := insertExternalTransfer(
@@ -148,16 +151,15 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		return 0, err
 	}
 
-
 	if err := insertOutboxEvent(
-		ctx, tx,
+		ctx,
+		tx,
 		"ledger_transaction",
 		int64(transactionID),
 		"ledger.transaction.posted",
 	); err != nil {
 		return 0, err
 	}
-
 
 	if err := tx.Commit(); err != nil {
 		return 0, err

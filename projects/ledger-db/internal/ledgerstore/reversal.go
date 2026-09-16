@@ -82,7 +82,8 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 
 	if transaction.ToAccountID == cashSettlementAccountId || transaction.FromAccountID == cashSettlementAccountId {
 		err := insertOutboxEvent(
-			ctx, tx,
+			ctx,
+			tx,
 			"ledger_reversal",
 			int64(reversalRowId),
 			"ledger.transaction.reversed",

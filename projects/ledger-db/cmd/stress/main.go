@@ -26,8 +26,9 @@ type cliOptions struct {
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	options := cliOptions{
 		config: ledgerstress.Config{
-			DSN:   os.Getenv("LEDGER_DB_DSN"),
-			Reset: true,
+			DSN:             os.Getenv("LEDGER_DB_DSN"),
+			Reset:           true,
+			ReversalPercent: 10,
 		},
 	}
 	flags := newFlagSet(&options, stdout, stderr)
@@ -81,6 +82,7 @@ func newFlagSet(options *cliOptions, stdout io.Writer, stderr io.Writer) *flag.F
 	flags.IntVar(&config.DuplicatePercent, "duplicate-percent", 0, "percentage of logical operations that fan out concurrent duplicate requests")
 	flags.IntVar(&config.DuplicateFanout, "duplicate-fanout", 2, "number of same-key concurrent requests for duplicate operations")
 	flags.IntVar(&config.ConflictPercent, "conflict-percent", 0, "percentage of successful operations followed by an expected idempotency conflict")
+	flags.IntVar(&config.ReversalPercent, "reversal-percent", 10, "percentage of logical operations that attempt to reverse a prior transaction")
 	flags.DurationVar(&config.MinThinkTime, "think-min", 25*time.Millisecond, "minimum random pause between worker operations")
 	flags.DurationVar(&config.MaxThinkTime, "think-max", 250*time.Millisecond, "maximum random pause between worker operations")
 	flags.DurationVar(&config.ProgressInterval, "progress-interval", time.Second, "progress interval; set a negative duration like -1s to disable")
@@ -102,6 +104,7 @@ func writeHelp(output io.Writer) {
 	fmt.Fprintln(output, "Most-used flags:")
 	fmt.Fprintln(output, "  -accounts, -workers, -operations, -max-open-conns")
 	fmt.Fprintln(output, "  -duplicate-percent, -duplicate-fanout, -conflict-percent")
+	fmt.Fprintln(output, "  -reversal-percent")
 	fmt.Fprintln(output, "  -hot-accounts, -hot-transfer-percent")
 	fmt.Fprintln(output, "  -think-min, -think-max, -progress-interval")
 	fmt.Fprintln(output)
@@ -164,6 +167,7 @@ func writeFullHelp(output io.Writer, flags *flag.FlagSet) {
 		"duplicate-percent",
 		"duplicate-fanout",
 		"conflict-percent",
+		"reversal-percent",
 	})
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Output and validation flags:")

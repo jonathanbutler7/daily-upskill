@@ -47,6 +47,7 @@ type Config struct {
 	DuplicatePercent   int
 	DuplicateFanout    int
 	ConflictPercent    int
+	ReversalPercent    int
 	OperationTimeout   time.Duration
 	MinThinkTime       time.Duration
 	MaxThinkTime       time.Duration
@@ -84,6 +85,7 @@ type SummaryConfig struct {
 	DuplicatePercent     int   `json:"duplicate_percent"`
 	DuplicateFanout      int   `json:"duplicate_fanout"`
 	ConflictPercent      int   `json:"conflict_percent"`
+	ReversalPercent      int   `json:"reversal_percent"`
 	OperationTimeoutMS   int64 `json:"operation_timeout_ms"`
 	MinThinkTimeMS       int64 `json:"min_think_time_ms"`
 	MaxThinkTimeMS       int64 `json:"max_think_time_ms"`
@@ -186,12 +188,13 @@ type finalEvent struct {
 }
 
 type workerContext struct {
-	runLabel  string
-	db        *sql.DB
-	accounts  []ledgerstore.AccountID
-	config    Config
-	collector *collector
-	sequence  *atomic.Int64
+	runLabel        string
+	db              *sql.DB
+	accounts        []ledgerstore.AccountID
+	config          Config
+	collector       *collector
+	sequence        *atomic.Int64
+	reversalTargets *transactionPool
 }
 
 type operationPlan struct {
@@ -203,6 +206,35 @@ type operationPlan struct {
 	fromAccountID  ledgerstore.AccountID
 	toAccountID    ledgerstore.AccountID
 	externalDir    ledgerstore.ExternalTransferDirection
+	transactionID  ledgerstore.TransactionID
+}
+
+type transactionPool struct {
+	mu           sync.Mutex
+	transactions []ledgerstore.TransactionID
+}
+
+func (p *transactionPool) add(transactionID ledgerstore.TransactionID) {
+	if transactionID == 0 {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.transactions = append(p.transactions, transactionID)
+}
+
+func (p *transactionPool) take(random *rand.Rand) (ledgerstore.TransactionID, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if len(p.transactions) == 0 {
+		return 0, false
+	}
+	index := random.Intn(len(p.transactions))
+	transactionID := p.transactions[index]
+	p.transactions[index] = p.transactions[len(p.transactions)-1]
+	p.transactions = p.transactions[:len(p.transactions)-1]
+	return transactionID, true
 }
 
 type requestResult struct {
@@ -263,12 +295,13 @@ func Run(ctx context.Context, config Config) (Summary, error) {
 
 	var sequence atomic.Int64
 	workerCtx := workerContext{
-		runLabel:  runLabel,
-		db:        db,
-		accounts:  accounts,
-		config:    config,
-		collector: collector,
-		sequence:  &sequence,
+		runLabel:        runLabel,
+		db:              db,
+		accounts:        accounts,
+		config:          config,
+		collector:       collector,
+		sequence:        &sequence,
+		reversalTargets: &transactionPool{},
 	}
 
 	var next atomic.Int64
@@ -424,6 +457,9 @@ func validateConfig(config Config) error {
 	}
 	if config.ConflictPercent < 0 || config.ConflictPercent > 100 {
 		return fmt.Errorf("conflict percent must be between 0 and 100")
+	}
+	if config.ReversalPercent < 0 || config.ReversalPercent > 100 {
+		return fmt.Errorf("reversal percent must be between 0 and 100")
 	}
 	if config.MinThinkTime < 0 {
 		return fmt.Errorf("min think time must not be negative")
@@ -596,8 +632,14 @@ func runOperation(ctx context.Context, workerID int, operationNumber int, random
 	}
 
 	started := time.Now()
-	err := runPlanRequests(ctx, plan, fanout, workerCtx)
-	if err == nil && workerCtx.config.ConflictPercent > 0 && random.Intn(100) < workerCtx.config.ConflictPercent {
+	if plan.operation == "reversal" {
+		fanout = 1
+	}
+	transactionID, err := runPlanRequests(ctx, plan, fanout, workerCtx)
+	if err == nil && plan.operation != "reversal" {
+		workerCtx.reversalTargets.add(transactionID)
+	}
+	if err == nil && plan.operation != "reversal" && workerCtx.config.ConflictPercent > 0 && random.Intn(100) < workerCtx.config.ConflictPercent {
 		err = runExpectedConflict(ctx, plan, workerCtx)
 	}
 
@@ -605,13 +647,24 @@ func runOperation(ctx context.Context, workerID int, operationNumber int, random
 }
 
 func newOperationPlan(workerID int, operationNumber int, sequence int64, random *rand.Rand, workerCtx workerContext) operationPlan {
-	operation := chooseOperation(random)
+	operation := chooseOperation(random, workerCtx.config.ReversalPercent)
 	amount := ledgerstore.Amount(random.Int63n(workerCtx.config.MaxAmount) + 1)
 	plan := operationPlan{
 		operation:      operation,
 		amount:         amount,
 		idempotencyKey: ledgerstore.IdempotencyKey(fakeIdempotencyKey(workerCtx.runLabel, operation, workerID, operationNumber, sequence)),
 		externalRef:    ledgerstore.ExternalReference(fakeExternalReference(workerCtx.runLabel, operation, operationNumber, sequence)),
+	}
+	if operation == "reversal" {
+		transactionID, ok := workerCtx.reversalTargets.take(random)
+		if ok {
+			plan.transactionID = transactionID
+			return plan
+		}
+		operation = chooseBaseOperation(random)
+		plan.operation = operation
+		plan.idempotencyKey = ledgerstore.IdempotencyKey(fakeIdempotencyKey(workerCtx.runLabel, operation, workerID, operationNumber, sequence))
+		plan.externalRef = ledgerstore.ExternalReference(fakeExternalReference(workerCtx.runLabel, operation, operationNumber, sequence))
 	}
 
 	switch operation {
@@ -628,14 +681,13 @@ func newOperationPlan(workerID int, operationNumber int, sequence int64, random 
 	return plan
 }
 
-func runPlanRequests(ctx context.Context, plan operationPlan, fanout int, workerCtx workerContext) error {
+func runPlanRequests(ctx context.Context, plan operationPlan, fanout int, workerCtx workerContext) (ledgerstore.TransactionID, error) {
 	if fanout < 1 {
 		fanout = 1
 	}
 	workerCtx.collector.recordRequestAttempts(int64(fanout))
 	if fanout == 1 {
-		_, err := runPlanRequest(ctx, plan, workerCtx)
-		return err
+		return runPlanRequest(ctx, plan, workerCtx)
 	}
 
 	workerCtx.collector.recordConcurrentDuplicate(int64(fanout - 1))
@@ -691,6 +743,13 @@ func executePlan(ctx context.Context, plan operationPlan, db *sql.DB) (ledgersto
 			IdempotencyKey:            plan.idempotencyKey,
 			ExternalTransferDirection: plan.externalDir,
 		})
+	case "reversal":
+		reversalID, err := ledger.Reversal(ctx, db, ledgerstore.ReversalCommand{
+			TransactionID:  plan.transactionID,
+			IdempotencyKey: ledgerstore.IdempotencyKey(plan.idempotencyKey),
+			Reason:         ledgerstore.Reason("stress test reversal"),
+		})
+		return ledgerstore.TransactionID(reversalID), err
 	default:
 		return ledger.PostTransfer(ctx, db, ledgerstore.TransferCommand{
 			FromAccountID:  plan.fromAccountID,
@@ -701,7 +760,7 @@ func executePlan(ctx context.Context, plan operationPlan, db *sql.DB) (ledgersto
 	}
 }
 
-func summarizeDuplicateResults(operation string, results []requestResult, collector *collector) error {
+func summarizeDuplicateResults(operation string, results []requestResult, collector *collector) (ledgerstore.TransactionID, error) {
 	var firstSuccess ledgerstore.TransactionID
 	successes := int64(0)
 	var firstErr error
@@ -720,14 +779,14 @@ func summarizeDuplicateResults(operation string, results []requestResult, collec
 		}
 		if result.transactionID != firstSuccess {
 			collector.recordUnexpectedIdempotency()
-			return fmt.Errorf("duplicate %s requests returned different transaction ids", operation)
+			return 0, fmt.Errorf("duplicate %s requests returned different transaction ids", operation)
 		}
 	}
 
 	if successes > 1 {
 		collector.recordIdempotentReplays(successes - 1)
 	}
-	return firstErr
+	return firstSuccess, firstErr
 }
 
 func (p operationPlan) withConflictingAmount() operationPlan {
@@ -761,8 +820,19 @@ func retryTransaction(maxRetries int, fn func() (ledgerstore.TransactionID, erro
 	return 0, err
 }
 
-func chooseOperation(random *rand.Rand) string {
+func chooseOperation(random *rand.Rand, reversalPercent int) string {
 	n := random.Intn(100)
+	if n < reversalPercent {
+		return "reversal"
+	}
+	return chooseBaseOperationAt(n - reversalPercent)
+}
+
+func chooseBaseOperation(random *rand.Rand) string {
+	return chooseBaseOperationAt(random.Intn(100))
+}
+
+func chooseBaseOperationAt(n int) string {
 	switch {
 	case n < 15:
 		return "deposit"
@@ -852,6 +922,7 @@ func summaryConfig(config Config) SummaryConfig {
 		DuplicatePercent:     config.DuplicatePercent,
 		DuplicateFanout:      config.DuplicateFanout,
 		ConflictPercent:      config.ConflictPercent,
+		ReversalPercent:      config.ReversalPercent,
 		OperationTimeoutMS:   config.OperationTimeout.Milliseconds(),
 		MinThinkTimeMS:       config.MinThinkTime.Milliseconds(),
 		MaxThinkTimeMS:       config.MaxThinkTime.Milliseconds(),
@@ -1113,7 +1184,7 @@ func writeDashboard(output io.Writer, data dashboardData) {
 		dim(data.At.Format("15:04:05")),
 		dim(fmt.Sprintf("accounts=%d workers=%d ops=%d", data.Config.Accounts, data.Config.Workers, data.Config.Operations)),
 	)
-	fmt.Fprintf(output, "%s\n", dim("Local Postgres . USD ledger . randomized deposits, withdrawals, and wallet transfers"))
+	fmt.Fprintf(output, "%s\n", dim("Local Postgres . USD ledger . randomized deposits, withdrawals, transfers, and reversals"))
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, dim("        ______________________________"))
 	fmt.Fprintln(output, dim("       | debit       | credit        |"))
@@ -1160,6 +1231,10 @@ func writeDashboard(output io.Writer, data dashboardData) {
 	writeDashboardRow(output,
 		fmt.Sprintf("Withdrawal %s %d", bar(operationRatio(stats, "withdrawal"), 24, ansiCyan), stats.ByOperation["withdrawal"]),
 		dbPoolLine(data.DBStats, data.Config, "waits"),
+	)
+	writeDashboardRow(output,
+		fmt.Sprintf("Reversal   %s %d", bar(operationRatio(stats, "reversal"), 24, ansiCyan), stats.ByOperation["reversal"]),
+		fmt.Sprintf("Target rate %d%%", data.Config.ReversalPercent),
 	)
 	writeDashboardRow(output,
 		accountSpreadLine(data.Config),
@@ -1387,7 +1462,7 @@ func validationCountLines(data dashboardData) []string {
 		{label: "Txns", expected: int64(data.Config.Accounts) + data.Stats.Success, actual: summary.TransactionCount},
 		{label: "Entries", expected: 2 * (int64(data.Config.Accounts) + data.Stats.Success), actual: summary.EntryCount},
 		{label: "External", expected: int64(data.Config.Accounts) + data.Stats.BySuccessfulOperation["deposit"] + data.Stats.BySuccessfulOperation["withdrawal"], actual: summary.ExternalTransferCount},
-		{label: "Reversals", expected: 0, actual: summary.ReversalCount},
+		{label: "Reversals", expected: data.Stats.BySuccessfulOperation["reversal"], actual: summary.ReversalCount},
 		{label: "Issues", expected: 0, actual: summary.IssueCount},
 	}
 

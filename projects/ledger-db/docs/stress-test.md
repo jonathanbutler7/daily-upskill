@@ -30,6 +30,7 @@ The current runner calls the Go command boundary directly. It exercises:
 - posted external deposits
 - posted external withdrawals
 - wallet-to-wallet transfers
+- reversals of previously successful non-reversal transactions
 - idempotency keys for every attempted operation
 - optional concurrent duplicate requests with the same idempotency key
 - optional mismatched-key requests that should return idempotency conflicts
@@ -40,6 +41,14 @@ The current runner calls the Go command boundary directly. It exercises:
 This runner is for write-path and database contention. It does not measure HTTP
 server overhead, and it does not create alternate settlement accounts. External
 transfers use the single `Cash Settlement` account seeded by the migrations.
+
+The CLI attempts reversals for 10% of logical operations by default. A reversal
+target is selected from previously successful deposit, withdrawal, or transfer
+transactions. Each target is removed from the candidate pool before the reversal
+is attempted, so one stress operation cannot select the same original twice.
+Use `-reversal-percent=0` to disable the workload or change the rate. A reversal
+that cannot restore the original balances because funds moved afterward is
+reported as a business operation failure.
 
 ## Visibility
 
@@ -148,7 +157,8 @@ go run ./cmd/stress \
   -operations=1000 \
   -duplicate-percent=10 \
   -duplicate-fanout=3 \
-  -conflict-percent=2
+  -conflict-percent=2 \
+  -reversal-percent=10
 ```
 
 `-duplicate-percent` chooses how often a logical operation fans out same-key

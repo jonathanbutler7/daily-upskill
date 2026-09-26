@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"ledger-db/internal/ledgerstore"
+	"ledger-db/internal/testdb"
 	"testing"
 )
 
@@ -90,5 +91,44 @@ func TestDepositFundsRequestValidation(t *testing.T) {
 				t.Fatalf("got %q, want %q", err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestPostExternalTransferForwardsDeferredSettlementMode(t *testing.T) {
+	ctx, db := testdb.OpenIntegrationDB(t)
+	testdb.ResetIntegrationDB(t, ctx, db)
+
+	var userAccountID int64
+	err := db.QueryRowContext(ctx, `
+		insert into ledger_accounts (name, description, currency_code, normal_balance, ledgerable_type, balance)
+		values ('Deferred test wallet', 'Deferred test wallet', 'USD', 'credit', 'internal_account', 0)
+		returning id;
+	`).Scan(&userAccountID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
+		UserAccountID:             ledgerstore.AccountID(userAccountID),
+		TransferAmount:            100,
+		Rail:                      "ach",
+		ExternalReference:         "deferred-mode-forwarding-test",
+		IdempotencyKey:            "deferred-mode-forwarding-test",
+		ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+		SettlementBalanceMode:     ledgerstore.SettlementBalanceModeDeferredAsync,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var userBalance, settlementBalance int64
+	if err := db.QueryRowContext(ctx, `select balance from ledger_accounts where id = $1`, userAccountID).Scan(&userBalance); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `select balance from ledger_accounts where name = 'Cash Settlement' and currency_code = 'USD'`).Scan(&settlementBalance); err != nil {
+		t.Fatal(err)
+	}
+	if userBalance != 100 || settlementBalance != 0 {
+		t.Fatalf("balances: user=%d settlement=%d, want 100 and 0", userBalance, settlementBalance)
 	}
 }

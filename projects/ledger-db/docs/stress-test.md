@@ -42,6 +42,52 @@ This runner is for write-path and database contention. It does not measure HTTP
 server overhead, and it does not create alternate settlement accounts. External
 transfers use the single `Cash Settlement` account seeded by the migrations.
 
+## Settlement contention A/B test
+
+Run the same reset-and-load workload twice, once with synchronous settlement
+balance updates and once with `deferred async` updates:
+
+```bash
+go run ./cmd/stress \
+  -ab-test \
+  -accounts=1100 \
+  -workers=150 \
+  -operations=10000 \
+  -max-open-conns=25
+```
+
+The A/B command disables reversals so both runs measure the external-transfer
+path. It prints the existing performance grade and score, RPS, P95/P99 latency,
+pool wait per operation, and maximum lock waiters side by side. The deferred
+async run is expected to fail the current validator until a settlement worker
+exists; that validation result is shown separately from the contention metrics.
+
+Lower latency, pool wait, and lock-waiter values indicate less contention. The
+two runs reset the database independently, so they should be compared using the
+same machine and database settings.
+
+To put more of the timed workload through the single `Cash Settlement` balance
+row, use an external-transfer-heavy mix:
+
+```bash
+go run ./cmd/stress \
+  -ab-test \
+  -accounts=500 \
+  -workers=150 \
+  -operations=50000 \
+  -max-open-conns=50 \
+  -external-transfer-percent=90 \
+  -think-min=1ms \
+  -think-max=1ms
+```
+
+With reversals disabled by `-ab-test`, approximately 45% of operations are
+deposits, 45% are withdrawals, and 10% are wallet transfers. Each external
+transfer updates the settlement row in the synchronous run. The default mix is
+30% external transfers. The external-transfer percentage plus any reversal
+percentage must not exceed 100. Use at least `1ms` for both think-time flags;
+the runner currently replaces `0s` with its default pacing.
+
 The CLI attempts reversals for 10% of logical operations by default. A reversal
 target is selected from previously successful deposit, withdrawal, or transfer
 transactions. Each target is removed from the candidate pool before the reversal

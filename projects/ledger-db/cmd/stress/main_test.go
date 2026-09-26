@@ -24,6 +24,7 @@ func TestHelpShowsShortQuickStart(t *testing.T) {
 		"Duplicate/idempotency",
 		"Most-used flags:",
 		"-operations",
+		"-external-transfer-percent",
 		"-max-open-conns",
 		"-duplicate-percent",
 		"Scoring:",

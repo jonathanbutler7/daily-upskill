@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"ledger-db/internal/ledgerstore"
 	"ledger-db/internal/ledgerstress"
 )
 
@@ -18,9 +19,11 @@ func main() {
 }
 
 type cliOptions struct {
-	config   ledgerstress.Config
-	help     bool
-	fullHelp bool
+	config                  ledgerstress.Config
+	externalTransferPercent int
+	help                    bool
+	fullHelp                bool
+	abTest                  bool
 }
 
 func run(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -48,10 +51,14 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 0
 	}
 
+	options.config.ExternalTransferPercent = &options.externalTransferPercent
 	options.config.Output = stdout
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if options.abTest {
+		return runABTest(ctx, options.config, stdout, stderr)
+	}
 
 	if _, err := ledgerstress.Run(ctx, options.config); err != nil {
 		fmt.Fprintf(stderr, "stress run failed: %v\n", err)
@@ -72,11 +79,13 @@ func newFlagSet(options *cliOptions, stdout io.Writer, stderr io.Writer) *flag.F
 	flags.BoolVar(&options.help, "help", false, "show this help")
 	flags.BoolVar(&options.help, "h", false, "show this help")
 	flags.BoolVar(&options.fullHelp, "help-full", false, "show all flags and longer examples")
+	flags.BoolVar(&options.abTest, "ab-test", false, "run sync and deferred async modes and compare contention")
 	flags.IntVar(&config.Accounts, "accounts", 25, "number of stress wallet accounts to create")
 	flags.IntVar(&config.Workers, "workers", 10, "number of concurrent workers")
 	flags.IntVar(&config.Operations, "operations", 1000, "number of logical ledger operations to attempt")
 	flags.IntVar(&config.MaxRetries, "max-retries", 3, "max retries for retryable database errors")
 	flags.IntVar(&config.MaxOpenConns, "max-open-conns", 0, "database max open connections; 0 means min(workers + 4, 50)")
+	flags.IntVar(&options.externalTransferPercent, "external-transfer-percent", 30, "percentage of operations that are external deposits or withdrawals; split evenly")
 	flags.IntVar(&config.HotAccounts, "hot-accounts", 0, "number of seeded accounts to treat as hot transfer accounts; 0 disables hot-account mode")
 	flags.IntVar(&config.HotTransferPercent, "hot-transfer-percent", 0, "percentage of wallet transfers routed within the hot-account set")
 	flags.IntVar(&config.DuplicatePercent, "duplicate-percent", 0, "percentage of logical operations that fan out concurrent duplicate requests")
@@ -104,7 +113,8 @@ func writeHelp(output io.Writer) {
 	fmt.Fprintln(output, "Most-used flags:")
 	fmt.Fprintln(output, "  -accounts, -workers, -operations, -max-open-conns")
 	fmt.Fprintln(output, "  -duplicate-percent, -duplicate-fanout, -conflict-percent")
-	fmt.Fprintln(output, "  -reversal-percent")
+	fmt.Fprintln(output, "  -reversal-percent, -external-transfer-percent")
+	fmt.Fprintln(output, "  -ab-test")
 	fmt.Fprintln(output, "  -hot-accounts, -hot-transfer-percent")
 	fmt.Fprintln(output, "  -think-min, -think-max, -progress-interval")
 	fmt.Fprintln(output)
@@ -144,6 +154,7 @@ func writeFullHelp(output io.Writer, flags *flag.FlagSet) {
 		"accounts",
 		"workers",
 		"operations",
+		"external-transfer-percent",
 		"think-min",
 		"think-max",
 	})
@@ -168,6 +179,7 @@ func writeFullHelp(output io.Writer, flags *flag.FlagSet) {
 		"duplicate-fanout",
 		"conflict-percent",
 		"reversal-percent",
+		"ab-test",
 	})
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Output and validation flags:")
@@ -221,6 +233,86 @@ func writeFullHelp(output io.Writer, flags *flag.FlagSet) {
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "  If a target scores too high, lower -max-open-conns, reduce think time, or")
 	fmt.Fprintln(output, "  raise -hot-transfer-percent. If it scores too low, do the opposite.")
+}
+
+type abResult struct {
+	label   string
+	summary ledgerstress.Summary
+	err     error
+}
+
+func runABTest(ctx context.Context, config ledgerstress.Config, stdout, stderr io.Writer) int {
+	config.Output = io.Discard
+	// Keep the progress reporter running even though its output is discarded.
+	// It samples PostgreSQL lock waiters during the workload and records the peak.
+	if config.ProgressInterval < 0 {
+		config.ProgressInterval = time.Second
+	}
+	config.ValidationInterval = 0
+	config.ReversalPercent = 0
+
+	fmt.Fprintln(stdout, "LedgerDB contention A/B test")
+	fmt.Fprintln(stdout, "Both runs use the same workload settings and reset the database before running.")
+	fmt.Fprintln(stdout, "Reversals are disabled so this measures external-transfer settlement behavior only.")
+	fmt.Fprintln(stdout)
+
+	results := []abResult{
+		{label: "sync", summary: runABMode(ctx, config, ledgerstore.SettlementBalanceModeSync, stderr)},
+		{label: "deferred async", summary: runABMode(ctx, config, ledgerstore.SettlementBalanceModeDeferredAsync, stderr)},
+	}
+
+	fmt.Fprintln(stdout, "Results (lower is better for latency, pool wait, and lock waiters):")
+	fmt.Fprintf(stdout, "%-22s %8s %12s %12s %12s %16s %16s %18s\n", "Mode", "Grade", "RPS", "P95 ms", "P99 ms", "Pool wait/op", "Lock waiters", "Validation")
+	fmt.Fprintf(stdout, "%-22s %8s %12s %12s %12s %16s %16s %18s\n", "----------------------", "--------", "------------", "------------", "------------", "----------------", "----------------", "------------------")
+
+	for i := range results {
+		result := &results[i]
+		grade := "-"
+		if result.summary.Performance.Grade != "" {
+			grade = fmt.Sprintf("%s/%d", result.summary.Performance.Grade, result.summary.Performance.Score)
+		}
+		validation := "healthy"
+		if !result.summary.Healthy {
+			validation = "expected lag/fail"
+		}
+		fmt.Fprintf(stdout, "%-22s %8s %12.1f %12.2f %12.2f %16.2f %16d %18s\n",
+			result.label,
+			grade,
+			result.summary.Stats.OpsPerSecond,
+			result.summary.Stats.LatencyMS.P95,
+			result.summary.Stats.LatencyMS.P99,
+			result.summary.Performance.PoolWaitPerOpMS,
+			result.summary.Stats.MaxLockWaiters,
+			validation,
+		)
+	}
+
+	if len(results) == 2 && results[0].summary.RunID != "" && results[1].summary.RunID != "" {
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, "Deferred async minus sync:")
+		fmt.Fprintf(stdout, "  RPS:           %+0.1f/sec\n", results[1].summary.Stats.OpsPerSecond-results[0].summary.Stats.OpsPerSecond)
+		fmt.Fprintf(stdout, "  P95 latency:   %+0.2f ms\n", results[1].summary.Stats.LatencyMS.P95-results[0].summary.Stats.LatencyMS.P95)
+		fmt.Fprintf(stdout, "  P99 latency:   %+0.2f ms\n", results[1].summary.Stats.LatencyMS.P99-results[0].summary.Stats.LatencyMS.P99)
+		fmt.Fprintf(stdout, "  Pool wait/op:  %+0.2f ms\n", results[1].summary.Performance.PoolWaitPerOpMS-results[0].summary.Performance.PoolWaitPerOpMS)
+		fmt.Fprintf(stdout, "  Lock waiters:  %+d\n", results[1].summary.Stats.MaxLockWaiters-results[0].summary.Stats.MaxLockWaiters)
+	}
+
+	for _, result := range results {
+		if result.summary.RunID == "" {
+			return 1
+		}
+	}
+	return 0
+}
+
+func runABMode(ctx context.Context, base ledgerstress.Config, mode ledgerstore.SettlementBalanceMode, stderr io.Writer) ledgerstress.Summary {
+	runConfig := base
+	runConfig.SettlementBalanceMode = mode
+	summary, err := ledgerstress.Run(ctx, runConfig)
+	if err != nil && summary.RunID == "" {
+		fmt.Fprintf(stderr, "%s run failed before producing metrics: %v\n", mode, err)
+	}
+	return summary
 }
 
 func printFlagGroup(output io.Writer, flags *flag.FlagSet, names []string) {

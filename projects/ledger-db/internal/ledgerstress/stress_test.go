@@ -338,6 +338,42 @@ func TestRandomAccountPairCanRouteToHotAccounts(t *testing.T) {
 	}
 }
 
+func TestOperationMixTargetsSettlementRow(t *testing.T) {
+	for _, test := range []struct {
+		name            string
+		reversalPercent int
+		externalPercent int
+		want            map[string]int
+	}{
+		{name: "default", reversalPercent: 10, externalPercent: 30, want: map[string]int{"reversal": 10, "deposit": 15, "withdrawal": 15, "transfer": 60}},
+		{name: "settlement heavy AB", reversalPercent: 0, externalPercent: 90, want: map[string]int{"deposit": 45, "withdrawal": 45, "transfer": 10}},
+		{name: "wallet only", reversalPercent: 0, externalPercent: 0, want: map[string]int{"transfer": 100}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := make(map[string]int)
+			for n := 0; n < 100; n++ {
+				got[chooseOperationAt(n, test.reversalPercent, test.externalPercent)]++
+			}
+			for operation, want := range test.want {
+				if got[operation] != want {
+					t.Fatalf("%s count = %d, want %d; mix=%v", operation, got[operation], want, got)
+				}
+			}
+			if len(got) != len(test.want) {
+				t.Fatalf("mix = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestExternalTransferPercentCannotOverlapReversals(t *testing.T) {
+	percent := 91
+	config := withDefaults(Config{Accounts: 2, Workers: 1, Operations: 1, ReversalPercent: 10, ExternalTransferPercent: &percent})
+	if err := validateConfig(config); err == nil || !strings.Contains(err.Error(), "between 0 and 90") {
+		t.Fatalf("validateConfig error = %v, want external transfer percent range", err)
+	}
+}
+
 func TestNewOperationPlanCanSelectReversalTarget(t *testing.T) {
 	targets := &transactionPool{}
 	targets.add(42)

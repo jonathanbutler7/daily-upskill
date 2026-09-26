@@ -18,6 +18,7 @@ type Reason string
 type NormalBalance string
 type EntryDirection string
 type LedgerableType string
+type SettlementBalanceMode string
 
 const (
 	LedgerTransactionTypeTransfer LedgerTransactionType = "transfer"
@@ -40,6 +41,9 @@ const (
 
 	EntryDirectionCredit EntryDirection = "credit"
 	EntryDirectionDebit  EntryDirection = "debit"
+
+	SettlementBalanceModeSync          SettlementBalanceMode = "sync"
+	SettlementBalanceModeDeferredAsync SettlementBalanceMode = "deferred-async"
 )
 
 type TransferCommand struct {
@@ -64,6 +68,7 @@ type PostExternalTransferCommand struct {
 	Rail                      PaymentRail
 	ExternalReference         ExternalReference
 	ExternalTransferDirection ExternalTransferDirection
+	SettlementBalanceMode     SettlementBalanceMode
 }
 
 type ReversalCommand struct {

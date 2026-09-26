@@ -25,6 +25,7 @@ import (
 
 const DefaultDSN = "postgresql://ledger_db:password@localhost:5432/ledger_db"
 const defaultMaxOpenConns = 50
+const defaultExternalTransferPercent = 30
 
 const (
 	OutputFormatText = "text"
@@ -32,29 +33,31 @@ const (
 )
 
 type Config struct {
-	DSN                string
-	MigrationsDir      string
-	Reset              bool
-	Accounts           int
-	Workers            int
-	Operations         int
-	SeedBalance        int64
-	MaxAmount          int64
-	MaxRetries         int
-	MaxOpenConns       int
-	HotAccounts        int
-	HotTransferPercent int
-	DuplicatePercent   int
-	DuplicateFanout    int
-	ConflictPercent    int
-	ReversalPercent    int
-	OperationTimeout   time.Duration
-	MinThinkTime       time.Duration
-	MaxThinkTime       time.Duration
-	ProgressInterval   time.Duration
-	ValidationInterval time.Duration
-	OutputFormat       string
-	Output             io.Writer
+	DSN                     string
+	MigrationsDir           string
+	Reset                   bool
+	Accounts                int
+	Workers                 int
+	Operations              int
+	SeedBalance             int64
+	MaxAmount               int64
+	MaxRetries              int
+	MaxOpenConns            int
+	ExternalTransferPercent *int
+	HotAccounts             int
+	HotTransferPercent      int
+	DuplicatePercent        int
+	DuplicateFanout         int
+	ConflictPercent         int
+	ReversalPercent         int
+	SettlementBalanceMode   ledgerstore.SettlementBalanceMode
+	OperationTimeout        time.Duration
+	MinThinkTime            time.Duration
+	MaxThinkTime            time.Duration
+	ProgressInterval        time.Duration
+	ValidationInterval      time.Duration
+	OutputFormat            string
+	Output                  io.Writer
 }
 
 type Summary struct {
@@ -72,24 +75,26 @@ type Summary struct {
 }
 
 type SummaryConfig struct {
-	Reset                bool  `json:"reset"`
-	Accounts             int   `json:"accounts"`
-	Workers              int   `json:"workers"`
-	Operations           int   `json:"operations"`
-	SeedBalance          int64 `json:"seed_balance"`
-	MaxAmount            int64 `json:"max_amount"`
-	MaxRetries           int   `json:"max_retries"`
-	MaxOpenConns         int   `json:"max_open_conns"`
-	HotAccounts          int   `json:"hot_accounts"`
-	HotTransferPercent   int   `json:"hot_transfer_percent"`
-	DuplicatePercent     int   `json:"duplicate_percent"`
-	DuplicateFanout      int   `json:"duplicate_fanout"`
-	ConflictPercent      int   `json:"conflict_percent"`
-	ReversalPercent      int   `json:"reversal_percent"`
-	OperationTimeoutMS   int64 `json:"operation_timeout_ms"`
-	MinThinkTimeMS       int64 `json:"min_think_time_ms"`
-	MaxThinkTimeMS       int64 `json:"max_think_time_ms"`
-	ValidationIntervalMS int64 `json:"validation_interval_ms"`
+	Reset                   bool   `json:"reset"`
+	Accounts                int    `json:"accounts"`
+	Workers                 int    `json:"workers"`
+	Operations              int    `json:"operations"`
+	SeedBalance             int64  `json:"seed_balance"`
+	MaxAmount               int64  `json:"max_amount"`
+	MaxRetries              int    `json:"max_retries"`
+	MaxOpenConns            int    `json:"max_open_conns"`
+	ExternalTransferPercent int    `json:"external_transfer_percent"`
+	HotAccounts             int    `json:"hot_accounts"`
+	HotTransferPercent      int    `json:"hot_transfer_percent"`
+	DuplicatePercent        int    `json:"duplicate_percent"`
+	DuplicateFanout         int    `json:"duplicate_fanout"`
+	ConflictPercent         int    `json:"conflict_percent"`
+	ReversalPercent         int    `json:"reversal_percent"`
+	SettlementBalanceMode   string `json:"settlement_balance_mode"`
+	OperationTimeoutMS      int64  `json:"operation_timeout_ms"`
+	MinThinkTimeMS          int64  `json:"min_think_time_ms"`
+	MaxThinkTimeMS          int64  `json:"max_think_time_ms"`
+	ValidationIntervalMS    int64  `json:"validation_interval_ms"`
 }
 
 type StatsSnapshot struct {
@@ -391,6 +396,10 @@ func withDefaults(config Config) Config {
 	if config.MaxOpenConns == 0 {
 		config.MaxOpenConns = min(config.Workers+4, defaultMaxOpenConns)
 	}
+	if config.ExternalTransferPercent == nil {
+		percent := defaultExternalTransferPercent
+		config.ExternalTransferPercent = &percent
+	}
 	if config.DuplicateFanout == 0 {
 		config.DuplicateFanout = 2
 	}
@@ -408,6 +417,9 @@ func withDefaults(config Config) Config {
 	}
 	if config.OutputFormat == "" {
 		config.OutputFormat = OutputFormatText
+	}
+	if config.SettlementBalanceMode == "" {
+		config.SettlementBalanceMode = ledgerstore.SettlementBalanceModeSync
 	}
 	if config.Output == nil {
 		config.Output = io.Discard
@@ -461,6 +473,12 @@ func validateConfig(config Config) error {
 	if config.ReversalPercent < 0 || config.ReversalPercent > 100 {
 		return fmt.Errorf("reversal percent must be between 0 and 100")
 	}
+	if *config.ExternalTransferPercent < 0 || *config.ExternalTransferPercent > 100-config.ReversalPercent {
+		return fmt.Errorf("external transfer percent must be between 0 and %d", 100-config.ReversalPercent)
+	}
+	if config.SettlementBalanceMode != ledgerstore.SettlementBalanceModeSync && config.SettlementBalanceMode != ledgerstore.SettlementBalanceModeDeferredAsync {
+		return fmt.Errorf("settlement balance mode must be %q or %q", ledgerstore.SettlementBalanceModeSync, ledgerstore.SettlementBalanceModeDeferredAsync)
+	}
 	if config.MinThinkTime < 0 {
 		return fmt.Errorf("min think time must not be negative")
 	}
@@ -501,6 +519,7 @@ func seedAccounts(ctx context.Context, db *sql.DB, runLabel string, config Confi
 			ExternalReference:         ledgerstore.ExternalReference(fakeExternalReference(runLabel, "seed", i+1, 0)),
 			IdempotencyKey:            ledgerstore.IdempotencyKey(fakeIdempotencyKey(runLabel, "seed", 0, i+1, 0)),
 			ExternalTransferDirection: ledgerstore.ExternalTransferDirectionDeposit,
+			SettlementBalanceMode:     config.SettlementBalanceMode,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("seed account %d balance: %w", i+1, err)
@@ -647,7 +666,7 @@ func runOperation(ctx context.Context, workerID int, operationNumber int, random
 }
 
 func newOperationPlan(workerID int, operationNumber int, sequence int64, random *rand.Rand, workerCtx workerContext) operationPlan {
-	operation := chooseOperation(random, workerCtx.config.ReversalPercent)
+	operation := chooseOperation(random, workerCtx.config.ReversalPercent, externalTransferPercent(workerCtx.config))
 	amount := ledgerstore.Amount(random.Int63n(workerCtx.config.MaxAmount) + 1)
 	plan := operationPlan{
 		operation:      operation,
@@ -661,7 +680,7 @@ func newOperationPlan(workerID int, operationNumber int, sequence int64, random 
 			plan.transactionID = transactionID
 			return plan
 		}
-		operation = chooseBaseOperation(random)
+		operation = chooseBaseOperation(random, externalTransferPercent(workerCtx.config))
 		plan.operation = operation
 		plan.idempotencyKey = ledgerstore.IdempotencyKey(fakeIdempotencyKey(workerCtx.runLabel, operation, workerID, operationNumber, sequence))
 		plan.externalRef = ledgerstore.ExternalReference(fakeExternalReference(workerCtx.runLabel, operation, operationNumber, sequence))
@@ -728,11 +747,11 @@ func runPlanRequest(ctx context.Context, plan operationPlan, workerCtx workerCon
 	return retryTransaction(workerCtx.config.MaxRetries, func() (ledgerstore.TransactionID, error) {
 		opCtx, cancel := context.WithTimeout(ctx, workerCtx.config.OperationTimeout)
 		defer cancel()
-		return executePlan(opCtx, plan, workerCtx.db)
+		return executePlan(opCtx, plan, workerCtx.db, workerCtx.config.SettlementBalanceMode)
 	}, workerCtx.collector)
 }
 
-func executePlan(ctx context.Context, plan operationPlan, db *sql.DB) (ledgerstore.TransactionID, error) {
+func executePlan(ctx context.Context, plan operationPlan, db *sql.DB, settlementBalanceMode ledgerstore.SettlementBalanceMode) (ledgerstore.TransactionID, error) {
 	switch plan.operation {
 	case "deposit", "withdrawal":
 		return ledger.PostExternalTransfer(ctx, db, ledgerstore.PostExternalTransferCommand{
@@ -742,6 +761,7 @@ func executePlan(ctx context.Context, plan operationPlan, db *sql.DB) (ledgersto
 			ExternalReference:         plan.externalRef,
 			IdempotencyKey:            plan.idempotencyKey,
 			ExternalTransferDirection: plan.externalDir,
+			SettlementBalanceMode:     settlementBalanceMode,
 		})
 	case "reversal":
 		reversalID, err := ledger.Reversal(ctx, db, ledgerstore.ReversalCommand{
@@ -820,27 +840,37 @@ func retryTransaction(maxRetries int, fn func() (ledgerstore.TransactionID, erro
 	return 0, err
 }
 
-func chooseOperation(random *rand.Rand, reversalPercent int) string {
-	n := random.Intn(100)
+func chooseOperation(random *rand.Rand, reversalPercent int, externalPercent int) string {
+	return chooseOperationAt(random.Intn(100), reversalPercent, externalPercent)
+}
+
+func chooseOperationAt(n int, reversalPercent int, externalPercent int) string {
 	if n < reversalPercent {
 		return "reversal"
 	}
-	return chooseBaseOperationAt(n - reversalPercent)
+	return chooseBaseOperationAt(n-reversalPercent, externalPercent)
 }
 
-func chooseBaseOperation(random *rand.Rand) string {
-	return chooseBaseOperationAt(random.Intn(100))
+func chooseBaseOperation(random *rand.Rand, externalPercent int) string {
+	return chooseBaseOperationAt(random.Intn(100), externalPercent)
 }
 
-func chooseBaseOperationAt(n int) string {
+func chooseBaseOperationAt(n int, externalPercent int) string {
 	switch {
-	case n < 15:
+	case n < (externalPercent+1)/2:
 		return "deposit"
-	case n < 30:
+	case n < externalPercent:
 		return "withdrawal"
 	default:
 		return "transfer"
 	}
+}
+
+func externalTransferPercent(config Config) int {
+	if config.ExternalTransferPercent == nil {
+		return defaultExternalTransferPercent
+	}
+	return *config.ExternalTransferPercent
 }
 
 func runLabelFromID(runID string) string {
@@ -909,24 +939,26 @@ func randomAccountPair(random *rand.Rand, accounts []ledgerstore.AccountID, conf
 
 func summaryConfig(config Config) SummaryConfig {
 	return SummaryConfig{
-		Reset:                config.Reset,
-		Accounts:             config.Accounts,
-		Workers:              config.Workers,
-		Operations:           config.Operations,
-		SeedBalance:          config.SeedBalance,
-		MaxAmount:            config.MaxAmount,
-		MaxRetries:           config.MaxRetries,
-		MaxOpenConns:         config.MaxOpenConns,
-		HotAccounts:          config.HotAccounts,
-		HotTransferPercent:   config.HotTransferPercent,
-		DuplicatePercent:     config.DuplicatePercent,
-		DuplicateFanout:      config.DuplicateFanout,
-		ConflictPercent:      config.ConflictPercent,
-		ReversalPercent:      config.ReversalPercent,
-		OperationTimeoutMS:   config.OperationTimeout.Milliseconds(),
-		MinThinkTimeMS:       config.MinThinkTime.Milliseconds(),
-		MaxThinkTimeMS:       config.MaxThinkTime.Milliseconds(),
-		ValidationIntervalMS: config.ValidationInterval.Milliseconds(),
+		Reset:                   config.Reset,
+		Accounts:                config.Accounts,
+		Workers:                 config.Workers,
+		Operations:              config.Operations,
+		SeedBalance:             config.SeedBalance,
+		MaxAmount:               config.MaxAmount,
+		MaxRetries:              config.MaxRetries,
+		MaxOpenConns:            config.MaxOpenConns,
+		ExternalTransferPercent: externalTransferPercent(config),
+		HotAccounts:             config.HotAccounts,
+		HotTransferPercent:      config.HotTransferPercent,
+		DuplicatePercent:        config.DuplicatePercent,
+		DuplicateFanout:         config.DuplicateFanout,
+		ConflictPercent:         config.ConflictPercent,
+		ReversalPercent:         config.ReversalPercent,
+		SettlementBalanceMode:   string(config.SettlementBalanceMode),
+		OperationTimeoutMS:      config.OperationTimeout.Milliseconds(),
+		MinThinkTimeMS:          config.MinThinkTime.Milliseconds(),
+		MaxThinkTimeMS:          config.MaxThinkTime.Milliseconds(),
+		ValidationIntervalMS:    config.ValidationInterval.Milliseconds(),
 	}
 }
 

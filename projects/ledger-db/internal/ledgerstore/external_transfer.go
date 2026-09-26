@@ -116,9 +116,10 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	if err != nil {
 		return 0, err
 	}
-	
-	// Only adjust the account balance of the non cash 
-	// settlement account. Cash settlement account
+
+	// The user balance remains synchronous in both modes. Deferred async
+	// moves only the shared Cash Settlement materialized balance out of the
+	// request transaction so the benchmark can compare the hot-row effect.
 	if isWithdrawal {
 		if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
 			return 0, err
@@ -128,6 +129,19 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 	if isDeposit {
 		if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
 			return 0, err
+		}
+	}
+
+	if cmd.SettlementBalanceMode != SettlementBalanceModeDeferredAsync {
+		if isDeposit {
+			if err := adjustAccountBalance(ctx, tx, fromAccountID, cmd.TransferAmount, EntryDirectionDebit); err != nil {
+				return 0, err
+			}
+		}
+		if isWithdrawal {
+			if err := adjustAccountBalance(ctx, tx, toAccountID, cmd.TransferAmount, EntryDirectionCredit); err != nil {
+				return 0, err
+			}
 		}
 	}
 

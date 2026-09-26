@@ -37,18 +37,7 @@ func PostExternalTransfer(
 		return 0, ledgerstore.ErrMustBeWithdrawalOrDeposit
 	}
 
-	transactionID, err := ledgerstore.PostExternalTransfer(
-		ctx,
-		db,
-		ledgerstore.PostExternalTransferCommand{
-			UserAccountID:             ledgerstore.AccountID(cmd.UserAccountID),
-			SettlementAccountID:       ledgerstore.AccountID(cmd.SettlementAccountID),
-			TransferAmount:            ledgerstore.Amount(cmd.TransferAmount),
-			Rail:                      ledgerstore.PaymentRail(cmd.Rail),
-			ExternalReference:         ledgerstore.ExternalReference(cmd.ExternalReference),
-			IdempotencyKey:            ledgerstore.IdempotencyKey(cmd.IdempotencyKey),
-			ExternalTransferDirection: cmd.ExternalTransferDirection,
-		})
+	transactionID, err := ledgerstore.PostExternalTransfer(ctx, db, cmd)
 
 	if errors.Is(err, ledgerstore.ErrAmountGreaterThanZero) {
 		return 0, ledgerstore.ErrAmountGreaterThanZero

@@ -1,6 +1,6 @@
 # Learning
 
-This folder contains the original learning materials from when this repo was a "daily practice" experiment.
+This folder contains active Go and TypeScript exercises alongside the original learning plans.
 
 ## What Changed
 
@@ -18,10 +18,11 @@ These projects took weeks, not minutes. But the learning stuck because I had to 
 
 ## What's Here
 
-- `exercises/` - Python exercises from Module 1 (completed)
+- `exercises/go/` - Go exercises, with one directory per exercise and a shared Go module
+- `exercises/ts/` - TypeScript exercises, with one directory per exercise
 - `ROADMAP.md` - The revised learning plan (payments-focused)
 - `SKILLS_TRACKER.md` - Project log
-- `CONTRIBUTING.md` - How to add new content
+- Older Python exercises and contribution guidance live in `../archive/`.
 
 ## The Lesson
 

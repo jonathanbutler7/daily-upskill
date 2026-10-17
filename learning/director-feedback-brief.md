@@ -37,7 +37,7 @@ what is director?
 - EMs and principal engineers
 - working with product, business, strategy leaders
 
-wallet is cornerstore . ubiquitious artifiact required in all ecommerce
+wallet is cornerstone . ubiquitious artifact required in all ecommerce
 makes sense what type of business you're in
 wallet in the context of weave's business, what makes sense and what doesnt
 

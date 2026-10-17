@@ -58,9 +58,20 @@ go run ./cmd/stress \
 
 The A/B command disables reversals so both runs measure the external-transfer
 path. It prints the existing performance grade and score, RPS, P95/P99 latency,
-pool wait per operation, and maximum lock waiters side by side. The deferred
-async run is expected to fail the current validator until a settlement worker
-exists; that validation result is shown separately from the contention metrics.
+pool wait per operation, and maximum lock waiters side by side. The deferred run
+starts a settlement outbox processor, drains seed work before timing, and keeps
+the processor running alongside the workload. After requests finish it waits up
+to 30 seconds for pending settlement work, stops the processor, and runs the same
+strict validator as the synchronous run. Either run failing makes the A/B command
+exit non-zero; performance deltas are printed only when both runs are healthy.
+
+Request RPS excludes setup, final drain, and validation. The deferred result also
+shows applied entries (excluding seed deposits), pending entries, worker errors,
+catch-up time after requests finish, and elapsed time from workload start through
+drain completion. Its processor uses one work connection and one listener in
+addition to `-max-open-conns`; pool wait metrics describe the request pool.
+Notifications wake the worker, and a one-second poll covers missed notifications.
+Stop standalone settlement workers before a reset-and-load run.
 
 Lower latency, pool wait, and lock-waiter values indicate less contention. The
 two runs reset the database independently, so they should be compared using the
@@ -85,8 +96,8 @@ With reversals disabled by `-ab-test`, approximately 45% of operations are
 deposits, 45% are withdrawals, and 10% are wallet transfers. Each external
 transfer updates the settlement row in the synchronous run. The default mix is
 30% external transfers. The external-transfer percentage plus any reversal
-percentage must not exceed 100. Use at least `1ms` for both think-time flags;
-the runner currently replaces `0s` with its default pacing.
+percentage must not exceed 100. Set both think-time flags to `0s` to remove pacing.
+The CLI defaults remain 25ms–250ms.
 
 The CLI attempts reversals for 10% of logical operations by default. A reversal
 target is selected from previously successful deposit, withdrawal, or transfer

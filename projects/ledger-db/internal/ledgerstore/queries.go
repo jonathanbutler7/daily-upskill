@@ -309,20 +309,22 @@ func insertLedgerEntry(
 	transactionID TransactionID,
 	entry LedgerEntryInput,
 ) error {
+	_, err := insertLedgerEntryID(ctx, tx, transactionID, entry)
+	return err
+}
+
+func insertLedgerEntryID(ctx context.Context, tx *sql.Tx, transactionID TransactionID, entry LedgerEntryInput) (int64, error) {
 	if entry.Amount <= 0 {
-		return ErrAmountGreaterThanZero
+		return 0, ErrAmountGreaterThanZero
 	}
 
 	const q = `
 		insert into ledger_entries (transaction_id, account_id, amount, direction)
-		values ($1, $2, $3, $4);
+		values ($1, $2, $3, $4) returning id;
 	`
-
-	if _, err := tx.ExecContext(ctx, q, transactionID, entry.AccountID, entry.Amount, entry.Direction); err != nil {
-		return err
-	}
-
-	return nil
+	var id int64
+	err := tx.QueryRowContext(ctx, q, transactionID, entry.AccountID, entry.Amount, entry.Direction).Scan(&id)
+	return id, err
 }
 
 func insertExternalTransfer(

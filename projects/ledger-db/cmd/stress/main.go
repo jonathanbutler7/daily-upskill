@@ -254,15 +254,16 @@ func runABTest(ctx context.Context, config ledgerstress.Config, stdout, stderr i
 	fmt.Fprintln(stdout, "LedgerDB contention A/B test")
 	fmt.Fprintln(stdout, "Both runs use the same workload settings and reset the database before running.")
 	fmt.Fprintln(stdout, "Reversals are disabled so this measures external-transfer settlement behavior only.")
+	fmt.Fprintln(stdout, "Request RPS excludes setup and drain. Deferred uses two extra connections for its worker and listener.")
 	fmt.Fprintln(stdout)
 
 	results := []abResult{
-		{label: "sync", summary: runABMode(ctx, config, ledgerstore.SettlementBalanceModeSync, stderr)},
-		{label: "deferred async", summary: runABMode(ctx, config, ledgerstore.SettlementBalanceModeDeferredAsync, stderr)},
+		runABMode(ctx, config, ledgerstore.SettlementBalanceModeSync, stderr),
+		runABMode(ctx, config, ledgerstore.SettlementBalanceModeDeferredAsync, stderr),
 	}
 
 	fmt.Fprintln(stdout, "Results (lower is better for latency, pool wait, and lock waiters):")
-	fmt.Fprintf(stdout, "%-22s %8s %12s %12s %12s %16s %16s %18s\n", "Mode", "Grade", "RPS", "P95 ms", "P99 ms", "Pool wait/op", "Lock waiters", "Validation")
+	fmt.Fprintf(stdout, "%-22s %8s %12s %12s %12s %16s %16s %18s\n", "Mode", "Grade", "Request RPS", "P95 ms", "P99 ms", "Pool wait/op", "Lock waiters", "Validation")
 	fmt.Fprintf(stdout, "%-22s %8s %12s %12s %12s %16s %16s %18s\n", "----------------------", "--------", "------------", "------------", "------------", "----------------", "----------------", "------------------")
 
 	for i := range results {
@@ -273,7 +274,7 @@ func runABTest(ctx context.Context, config ledgerstress.Config, stdout, stderr i
 		}
 		validation := "healthy"
 		if !result.summary.Healthy {
-			validation = "expected lag/fail"
+			validation = "FAILED"
 		}
 		fmt.Fprintf(stdout, "%-22s %8s %12.1f %12.2f %12.2f %16.2f %16d %18s\n",
 			result.label,
@@ -285,9 +286,12 @@ func runABTest(ctx context.Context, config ledgerstress.Config, stdout, stderr i
 			result.summary.Stats.MaxLockWaiters,
 			validation,
 		)
+		if s := result.summary.Settlement; s != nil {
+			fmt.Fprintf(stdout, "  Settlement: applied=%d pending=%d catchup=%dms end_to_end=%dms worker_errors=%d\n", s.Applied, s.Pending, s.CatchupMS, s.EndToEndMS, s.WorkerErrors)
+		}
 	}
 
-	if len(results) == 2 && results[0].summary.RunID != "" && results[1].summary.RunID != "" {
+	if results[0].err == nil && results[1].err == nil && results[0].summary.Healthy && results[1].summary.Healthy {
 		fmt.Fprintln(stdout)
 		fmt.Fprintln(stdout, "Deferred async minus sync:")
 		fmt.Fprintf(stdout, "  RPS:           %+0.1f/sec\n", results[1].summary.Stats.OpsPerSecond-results[0].summary.Stats.OpsPerSecond)
@@ -298,21 +302,22 @@ func runABTest(ctx context.Context, config ledgerstress.Config, stdout, stderr i
 	}
 
 	for _, result := range results {
-		if result.summary.RunID == "" {
+		if result.err != nil || !result.summary.Healthy {
 			return 1
 		}
 	}
 	return 0
 }
 
-func runABMode(ctx context.Context, base ledgerstress.Config, mode ledgerstore.SettlementBalanceMode, stderr io.Writer) ledgerstress.Summary {
+func runABMode(ctx context.Context, base ledgerstress.Config, mode ledgerstore.SettlementBalanceMode, stderr io.Writer) abResult {
 	runConfig := base
+	runConfig.Reset = true
 	runConfig.SettlementBalanceMode = mode
 	summary, err := ledgerstress.Run(ctx, runConfig)
-	if err != nil && summary.RunID == "" {
-		fmt.Fprintf(stderr, "%s run failed before producing metrics: %v\n", mode, err)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s run failed: %v\n", mode, err)
 	}
-	return summary
+	return abResult{label: string(mode), summary: summary, err: err}
 }
 
 func printFlagGroup(output io.Writer, flags *flag.FlagSet, names []string) {

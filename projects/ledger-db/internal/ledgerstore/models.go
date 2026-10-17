@@ -44,6 +44,7 @@ const (
 
 	SettlementBalanceModeSync          SettlementBalanceMode = "sync"
 	SettlementBalanceModeDeferredAsync SettlementBalanceMode = "deferred-async"
+	SettlementBalanceEvent                                   = "ledger.settlement_balance.requested"
 )
 
 type TransferCommand struct {

@@ -253,43 +253,43 @@ Use the weekly plan as a track, not a prison. If a real work payments project ap
 
 ### Week 14 - Aug 3, 2026
 
-- [ ] **Artifact**: Implement accounts, transactions, and ledger entries.
+- [x] **Artifact**: Implement accounts, transactions, and ledger entries.
 - **Work connection**: Notice where work systems store immutable facts versus mutable status.
 - **Done when**: A balanced transaction can be created and read back.
 
 ### Week 15 - Aug 10, 2026
 
-- [ ] **Artifact**: Add balance queries.
+- [x] **Artifact**: Add balance queries.
 - **Work connection**: Ask whether balances at work are stored, derived, cached, or recomputed.
 - **Done when**: Account balances derive from entries and tests prove balanced transactions stay balanced.
 
 ### Week 16 - Aug 17, 2026
 
-- [ ] **Artifact**: Add pending and posted entries.
+- [x] **Artifact**: Add pending and posted entries.
 - **Work connection**: Find a real state where the customer sees success before settlement is final.
 - **Done when**: The project can show pending balance, posted balance, and available balance.
 
 ### Week 17 - Aug 24, 2026
 
-- [ ] **Artifact**: Add idempotency keys.
+- [x] **Artifact**: Add idempotency keys.
 - **Work connection**: Identify one real operation that must be safe to retry.
 - **Done when**: Replaying the same transaction request does not create duplicate ledger movement.
 
 ### Week 18 - Aug 31, 2026
 
-- [ ] **Artifact**: Model a customer payment and processor fee.
+- [x] **Artifact**: Model a customer payment and processor fee.
 - **Work connection**: Learn where fees appear in reports and who consumes that data.
 - **Done when**: A payment can create entries for customer receivable/cash, processor fee, and net settlement.
 
 ### Week 19 - Sep 7, 2026
 
-- [ ] **Artifact**: Model refunds and reversals.
+- [x] **Artifact**: Model refunds and reversals.
 - **Work connection**: Compare refund timing to original payment timing at work.
 - **Done when**: Refunds create new entries instead of editing old entries.
 
 ### Week 20 - Sep 14, 2026
 
-- [ ] **Artifact**: Model disputes and chargebacks.
+- [-] **Artifact**: Model disputes and chargebacks.
 - **Work connection**: Learn who owns dispute workflows and what state changes are visible to customers.
 - **Done when**: The ledger can represent chargeback opened, funds withdrawn, chargeback won, and chargeback lost.
 

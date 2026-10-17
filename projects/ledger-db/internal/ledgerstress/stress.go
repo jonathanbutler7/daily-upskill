@@ -18,6 +18,7 @@ import (
 	"ledger-db/internal/ledgerschema"
 	"ledger-db/internal/ledgerstore"
 	"ledger-db/internal/ledgervalidator"
+	"ledger-db/internal/settlementworker"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -51,6 +52,7 @@ type Config struct {
 	ConflictPercent         int
 	ReversalPercent         int
 	SettlementBalanceMode   ledgerstore.SettlementBalanceMode
+	SettlementDrainTimeout  time.Duration
 	OperationTimeout        time.Duration
 	MinThinkTime            time.Duration
 	MaxThinkTime            time.Duration
@@ -72,6 +74,7 @@ type Summary struct {
 	FinalValidation ledgervalidator.Result `json:"final_validation"`
 	ValidationError string                 `json:"validation_error,omitempty"`
 	Healthy         bool                   `json:"healthy"`
+	Settlement      *SettlementSummary     `json:"settlement,omitempty"`
 }
 
 type SummaryConfig struct {
@@ -292,7 +295,16 @@ func Run(ctx context.Context, config Config) (Summary, error) {
 		return Summary{}, err
 	}
 
-	collector := newCollector(startedAt)
+	var settlement *runningSettlement
+	if config.SettlementBalanceMode == ledgerstore.SettlementBalanceModeDeferredAsync {
+		settlement, err = startSettlement(ctx, config)
+		if err != nil {
+			return Summary{}, err
+		}
+		defer settlement.stop()
+	}
+	workloadStarted := time.Now()
+	collector := newCollector(workloadStarted)
 	done := make(chan struct{})
 	var progressWG sync.WaitGroup
 	startProgressReporter(ctx, config, runID, db, collector, done, &progressWG)
@@ -319,8 +331,26 @@ func Run(ctx context.Context, config Config) (Summary, error) {
 		}(workerID)
 	}
 	workers.Wait()
+	requestsFinished := time.Now()
+	collector.finish()
 	close(done)
 	progressWG.Wait()
+	var settlementSummary *SettlementSummary
+	var settlementErr error
+	if settlement != nil {
+		settlementSummary, settlementErr = settlement.finish(ctx, config.SettlementDrainTimeout, workloadStarted, requestsFinished)
+		pending, err := settlementworker.Pending(ctx, db)
+		if err == nil {
+			settlementSummary.Pending = pending
+			if pending != 0 {
+				err = fmt.Errorf("%d settlement events remain pending", pending)
+			}
+		}
+		if settlementErr == nil && err != nil {
+			settlementErr = err
+			settlementSummary.Error = err.Error()
+		}
+	}
 
 	validationStarted := time.Now()
 	finalValidation, validationErr := ledgervalidator.Validate(ctx, db, ledgervalidator.Options{})
@@ -345,7 +375,8 @@ func Run(ctx context.Context, config Config) (Summary, error) {
 		DBStats:         captureDBStats(ctx, db),
 		FinalValidation: finalValidation,
 		ValidationError: errorString(validationErr),
-		Healthy:         validationErr == nil && finalValidation.Healthy && !hasUnexpectedErrors,
+		Healthy:         validationErr == nil && settlementErr == nil && finalValidation.Healthy && !hasUnexpectedErrors,
+		Settlement:      settlementSummary,
 	}
 	summary.Performance = gradePerformance(summary)
 
@@ -357,6 +388,9 @@ func Run(ctx context.Context, config Config) (Summary, error) {
 
 	if validationErr != nil {
 		return summary, validationErr
+	}
+	if settlementErr != nil {
+		return summary, fmt.Errorf("settlement drain: %w", settlementErr)
 	}
 	if !finalValidation.Healthy {
 		return summary, fmt.Errorf("final validation found %d issue(s)", finalValidation.Summary.IssueCount)
@@ -406,11 +440,8 @@ func withDefaults(config Config) Config {
 	if config.OperationTimeout == 0 {
 		config.OperationTimeout = 30 * time.Second
 	}
-	if config.MinThinkTime == 0 {
-		config.MinThinkTime = 25 * time.Millisecond
-	}
-	if config.MaxThinkTime == 0 {
-		config.MaxThinkTime = 250 * time.Millisecond
+	if config.SettlementDrainTimeout == 0 {
+		config.SettlementDrainTimeout = 30 * time.Second
 	}
 	if config.ProgressInterval == 0 {
 		config.ProgressInterval = time.Second
@@ -428,6 +459,9 @@ func withDefaults(config Config) Config {
 }
 
 func validateConfig(config Config) error {
+	if config.SettlementDrainTimeout <= 0 {
+		return fmt.Errorf("settlement drain timeout must be positive")
+	}
 	if config.Accounts < 2 {
 		return fmt.Errorf("accounts must be at least 2")
 	}
@@ -578,7 +612,9 @@ func startValidationReporter(ctx context.Context, config Config, runID string, d
 				return
 			case at := <-ticker.C:
 				started := time.Now()
-				result, err := ledgervalidator.Validate(ctx, db, ledgervalidator.Options{})
+				result, err := ledgervalidator.Validate(ctx, db, ledgervalidator.Options{
+					IncludePendingSettlement: config.SettlementBalanceMode == ledgerstore.SettlementBalanceModeDeferredAsync,
+				})
 				dbStats := captureDBStats(ctx, db)
 				collector.recordDBStats(dbStats)
 				collector.recordValidation(ValidationEvent{
@@ -1166,11 +1202,13 @@ func writeTextEvent(output io.Writer, event any) {
 			ValidationError: event.Summary.ValidationError,
 			Final:           true,
 			Mode:            "final",
+			Settlement:      event.Summary.Settlement,
 		})
 	}
 }
 
 type dashboardData struct {
+	Settlement      *SettlementSummary
 	At              time.Time
 	RunID           string
 	Config          SummaryConfig
@@ -1308,6 +1346,12 @@ func writeDashboard(output io.Writer, data dashboardData) {
 	if data.Final {
 		fmt.Fprintln(output)
 		fmt.Fprintf(output, "%s\n", color(ansiPurple, ansiBold, "Final"))
+		if s := data.Settlement; s != nil {
+			fmt.Fprintf(output, "  settlement: applied=%d pending=%d catchup=%dms end_to_end=%dms worker_errors=%d\n", s.Applied, s.Pending, s.CatchupMS, s.EndToEndMS, s.WorkerErrors)
+			if s.Error != "" {
+				fmt.Fprintf(output, "  settlement error: %s; last worker error: %s\n", s.Error, s.LastWorkerError)
+			}
+		}
 		if data.Performance.Grade != "" {
 			fmt.Fprintf(output, "  grade:     %s (%s)\n", performanceGradeText(data.Performance), data.Performance.Summary)
 			fmt.Fprintf(output, "  signals:   rps=%.1f worker_goroutines=%d runtime_goroutines=%d pool_wait/op=%.2fms pool_timeouts=%d server_rejects=%d lock_waiters_max=%d\n",
@@ -1767,6 +1811,7 @@ func errorString(err error) string {
 type collector struct {
 	mu                      sync.Mutex
 	startedAt               time.Time
+	finishedAt              time.Time
 	total                   int64
 	success                 int64
 	failure                 int64
@@ -1926,11 +1971,20 @@ func (c *collector) hasUnexpectedErrors() bool {
 	return c.unexpectedErrors > 0 || c.idempotencyUnexpected > 0
 }
 
+func (c *collector) finish() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.finishedAt = time.Now()
+}
+
 func (c *collector) snapshot() StatsSnapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	elapsed := time.Since(c.startedAt)
+	if !c.finishedAt.IsZero() {
+		elapsed = c.finishedAt.Sub(c.startedAt)
+	}
 	opsPerSecond := 0.0
 	if elapsed > 0 {
 		opsPerSecond = float64(c.total) / elapsed.Seconds()

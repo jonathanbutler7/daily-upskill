@@ -107,8 +107,14 @@ func PostExternalTransfer(ctx context.Context, db *sql.DB, cmd PostExternalTrans
 		{AccountID: toAccountID, Amount: cmd.TransferAmount, Direction: EntryDirectionCredit},
 	}
 	for _, entry := range entries {
-		if err := insertLedgerEntry(ctx, tx, transactionID, entry); err != nil {
+		entryID, err := insertLedgerEntryID(ctx, tx, transactionID, entry)
+		if err != nil {
 			return 0, err
+		}
+		if cmd.SettlementBalanceMode == SettlementBalanceModeDeferredAsync && entry.AccountID == cashSettlementAccountId {
+			if err := insertOutboxEvent(ctx, tx, "ledger_entry", entryID, SettlementBalanceEvent); err != nil {
+				return 0, err
+			}
 		}
 	}
 

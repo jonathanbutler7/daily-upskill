@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"ledger-db/internal/ledgerstore"
 )
 
 type CheckName string
@@ -22,6 +24,9 @@ const defaultMaxIssuesPerCheck = 100
 
 type Options struct {
 	MaxIssuesPerCheck int
+	// During processing, stored balance + pending deltas must match the ledger.
+	// Final audits leave this false after the worker drains.
+	IncludePendingSettlement bool
 }
 
 type Result struct {
@@ -59,6 +64,7 @@ type Issue struct {
 	StoredAmount       *int64    `json:"stored_amount,omitempty"`
 	DerivedAmount      *int64    `json:"derived_amount,omitempty"`
 	Delta              *int64    `json:"delta,omitempty"`
+	PendingAmount      *int64    `json:"pending_amount,omitempty"`
 }
 
 func Validate(ctx context.Context, db *sql.DB, opts Options) (Result, error) {
@@ -92,7 +98,9 @@ func Validate(ctx context.Context, db *sql.DB, opts Options) (Result, error) {
 		run  func(context.Context, *sql.Tx, int) ([]Issue, error)
 	}{
 		{CheckTransactionBalances, checkTransactionBalances},
-		{CheckAccountBalances, checkAccountBalances},
+		{CheckAccountBalances, func(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, error) {
+			return checkAccountBalances(ctx, tx, limit, opts.IncludePendingSettlement)
+		}},
 		{CheckTransactionShape, checkTransactionShape},
 		{CheckExternalTransfers, checkExternalTransfers},
 		{CheckReversals, checkReversals},
@@ -208,8 +216,15 @@ func checkTransactionBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Iss
 	return issues, rows.Err()
 }
 
-func checkAccountBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, error) {
+func checkAccountBalances(ctx context.Context, tx *sql.Tx, limit int, includePending bool) ([]Issue, error) {
 	const q = `
+			with pending as (
+				select e.account_id, sum(case when e.direction = a.normal_balance then e.amount else -e.amount end) as delta
+				from outbox_events o join ledger_entries e on e.id = o.source_id
+				join ledger_accounts a on a.id = e.account_id
+				where $2 and o.event_type = $3 and o.processed_at is null
+				group by e.account_id
+			)
 			select
 				la.id,
 				la.balance as stored_balance,
@@ -217,12 +232,14 @@ func checkAccountBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, 
 					when lt.status = 'posted' and le.archived = false and le.direction = la.normal_balance then le.amount
 					when lt.status = 'posted' and le.archived = false then -le.amount
 					else 0
-				end), 0) as derived_balance
+				end), 0) as derived_balance,
+				coalesce(p.delta, 0) as pending_delta
 			from ledger_accounts la
+			left join pending p on p.account_id = la.id
 			left join ledger_entries le on le.account_id = la.id
 			left join ledger_transactions lt on lt.id = le.transaction_id
-			group by la.id, la.balance, la.normal_balance
-			having la.balance <> coalesce(sum(case
+			group by la.id, la.balance, la.normal_balance, p.delta
+			having la.balance + coalesce(p.delta, 0) <> coalesce(sum(case
 				when lt.status = 'posted' and le.archived = false and le.direction = la.normal_balance then le.amount
 				when lt.status = 'posted' and le.archived = false then -le.amount
 				else 0
@@ -231,7 +248,7 @@ func checkAccountBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, 
 			limit $1;
 	`
 
-	rows, err := tx.QueryContext(ctx, q, limit)
+	rows, err := tx.QueryContext(ctx, q, limit, includePending, ledgerstore.SettlementBalanceEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -242,15 +259,17 @@ func checkAccountBalances(ctx context.Context, tx *sql.Tx, limit int) ([]Issue, 
 		var accountID int64
 		var storedBalance int64
 		var derivedBalance int64
-		if err := rows.Scan(&accountID, &storedBalance, &derivedBalance); err != nil {
+		var pendingDelta int64
+		if err := rows.Scan(&accountID, &storedBalance, &derivedBalance, &pendingDelta); err != nil {
 			return nil, err
 		}
 
-		delta := storedBalance - derivedBalance
+		delta := storedBalance + pendingDelta - derivedBalance
 		issues = append(issues, Issue{
 			Check:         CheckAccountBalances,
 			Code:          "account_balance_mismatch",
-			Message:       fmt.Sprintf("account %d stored balance %d does not match derived balance %d", accountID, storedBalance, derivedBalance),
+			Message:       fmt.Sprintf("account %d stored balance %d plus pending %d does not match derived balance %d", accountID, storedBalance, pendingDelta, derivedBalance),
+			PendingAmount: int64Ptr(pendingDelta),
 			AccountID:     int64Ptr(accountID),
 			StoredAmount:  int64Ptr(storedBalance),
 			DerivedAmount: int64Ptr(derivedBalance),

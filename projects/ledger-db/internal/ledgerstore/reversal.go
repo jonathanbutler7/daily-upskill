@@ -59,9 +59,25 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 		return 0, err
 	}
 
-	for _, entry := range reversalEntries {
-		if err := insertLedgerEntry(ctx, tx, reversalTransactionID, entry); err != nil {
+	deferred := make(map[AccountID]bool)
+	for i, entry := range reversalEntries {
+		// Follow the original entry's mode, even if its worker already finished.
+		var async bool
+		if err := tx.QueryRowContext(ctx, `select exists (
+			select 1 from outbox_events where source_type = 'ledger_entry'
+			and source_id = $1 and event_type = $2
+		)`, entries[i].ID, SettlementBalanceEvent).Scan(&async); err != nil {
 			return 0, err
+		}
+		entryID, err := insertLedgerEntryID(ctx, tx, reversalTransactionID, entry)
+		if err != nil {
+			return 0, err
+		}
+		if async {
+			deferred[entry.AccountID] = true
+			if err := insertOutboxEvent(ctx, tx, "ledger_entry", entryID, SettlementBalanceEvent); err != nil {
+				return 0, err
+			}
 		}
 	}
 
@@ -70,6 +86,9 @@ func ReverseTransaction(ctx context.Context, db *sql.DB, cmd ReversalCommand) (T
 	}
 
 	for _, entry := range reversalEntries {
+		if deferred[entry.AccountID] {
+			continue
+		}
 		if err := adjustAccountBalance(ctx, tx, entry.AccountID, entry.Amount, entry.Direction); err != nil {
 			return 0, err
 		}

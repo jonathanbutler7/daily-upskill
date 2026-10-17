@@ -41,6 +41,9 @@ psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
 
 psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
   -f projects/ledger-db/db/migrations/006_prevent_entry_mutations.sql
+
+psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
+  -f projects/ledger-db/db/migrations/007_settlement_outbox.sql
 ```
 
 The active application path posts through Go with `database/sql` transactions.
@@ -117,6 +120,36 @@ go run ./cmd/stress -accounts=5 -workers=2 -operations=50 -think-min=50ms -think
 
 See [stress test plan](docs/stress-test.md) for the runner shape and visibility
 fields.
+
+## Deferred settlement worker
+
+External transfers with `SettlementBalanceModeDeferredAsync` commit the user
+balance and both ledger entries immediately. Each deferred settlement entry gets
+a `ledger.settlement_balance.requested` outbox row. A Go processor applies those
+entries to the stored settlement balance in batches of up to 100.
+
+```bash
+go run ./cmd/settlement-worker
+```
+
+The worker uses `LEDGER_DB_DSN` (with the same local default as the stress runner),
+one work connection and one dedicated `LISTEN` connection. `NOTIFY` wakes it after
+the posting transaction commits. It also drains on startup/reconnect and polls
+every second. A failed batch rolls back and remains pending for retry; errors
+are logged. The balance update and `processed_at` marker commit together, and a
+unique index prevents two work rows for the same settlement entry.
+
+Reversals inherit the original entry's settlement mode. Pending work can be
+applied out of order, so the stored settlement balance can temporarily be
+negative. The worker applies entries already authorized by the synchronous user
+balance checks. During processing, stored settlement balance plus pending deltas
+must equal the ledger-derived balance; after draining, the balances must match
+exactly.
+
+`go run ./cmd/stress -ab-test` starts and stops its own processor for the deferred
+run. The command resets the schema, so stop standalone processors before running
+it. Migration 007 adds the new work type; historical `ledger.transaction.posted`
+rows do not identify which updates were deferred and are not backfilled.
 
 ## Run Go tests
 

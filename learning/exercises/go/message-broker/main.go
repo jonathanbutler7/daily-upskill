@@ -22,16 +22,6 @@ type Broker struct {
 	topics map[string]*Topic
 }
 
-type Consumer struct {
-	broker    *Broker
-	positions map[TopicPartition]int
-}
-
-type TopicPartition struct {
-	Topic     string
-	Partition int
-}
-
 type Topic struct {
 	Partitions []*Partition `json:"partitions"`
 }
@@ -44,6 +34,16 @@ type Record struct {
 	Offset int `json:"offset"`
 	Key    int `json:"key"`
 	Value  int `json:"value"`
+}
+
+type Consumer struct {
+	broker    *Broker
+	positions map[TopicPartition]int
+}
+
+type TopicPartition struct {
+	Topic     string
+	Partition int
 }
 
 func NewBroker() *Broker {
@@ -76,7 +76,6 @@ func main() {
 	fmt.Println(record2, ok2, err2)
 	fmt.Println(record3, ok3, err3)
 	fmt.Println("4", record4, ok4, err4)
-	// consumer :=
 }
 
 func (c *Consumer) Read(topicName string, partitionIndex int) (Record, bool, error) {
@@ -109,6 +108,7 @@ func (b *Broker) Append(topicName string, partitionIndex, key, value int) (Recor
 	if partitionIndex >= len(b.topics[topicName].Partitions) {
 		return Record{}, fmt.Errorf("partition index out of range")
 	}
+	
 	partition := topic.Partitions[partitionIndex]
 
 	offset := len(partition.Records)

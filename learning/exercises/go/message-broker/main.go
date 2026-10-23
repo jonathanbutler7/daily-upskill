@@ -2,111 +2,140 @@ package main
 
 import (
 	"fmt"
-	"slices"
 )
 
-type Message[T any] struct {
-	Offset int
-	Value  T
+// 1. The data model
+// Think of the broker as a catalog:
+
+// Broker keeps track of topics by name.
+// Topic is divided into partitions.
+// Partition is an ordered, append-only log of records.
+// Record is one entry in that log.
+// That gives you this shape:
+
+// Broker
+//
+//	"orders" ──> Topic
+//	              ├── Partition 0 ──> Record, Record, Record
+//	              └── Partition 1 ──> Record, Record
+type Broker struct {
+	topics map[string]*Topic
 }
 
-type Broker[T any] struct {
-	topics map[string][]Message[T]
+type Consumer struct {
+	broker    *Broker
+	positions map[TopicPartition]int
 }
 
-type Admin[T any] struct {
-	broker *Broker[T]
+type TopicPartition struct {
+	Topic     string
+	Partition int
 }
 
-type Producer[T any] struct {
-	broker *Broker[T]
+type Topic struct {
+	Partitions []*Partition `json:"partitions"`
 }
 
-type Consumer[T any] struct {
-	broker           *Broker[T]
-	topicsSubscribed []string
-	// later TopicPartition
+type Partition struct {
+	Records []Record `json:"records"`
 }
 
-func NewBroker[T any]() *Broker[T] {
-	return &Broker[T]{
-		topics: make(map[string][]Message[T]),
+type Record struct {
+	Offset int `json:"offset"`
+	Key    int `json:"key"`
+	Value  int `json:"value"`
+}
+
+func NewBroker() *Broker {
+	return &Broker{
+		topics: make(map[string]*Topic),
 	}
 }
 
-func NewAdmin[T any](broker *Broker[T]) *Admin[T] {
-	return &Admin[T]{
-		broker: broker,
-	}
-}
-
-func NewProducer[T any](broker *Broker[T]) *Producer[T] {
-	return &Producer[T]{
-		broker: broker,
-	}
-}
-func NewConsumer[T any](broker *Broker[T]) *Consumer[T] {
-	return &Consumer[T]{
-		broker:           broker,
-		topicsSubscribed: []string{},
+func NewConsumer(broker *Broker) *Consumer {
+	return &Consumer{
+		broker:    broker,
+		positions: make(map[TopicPartition]int),
 	}
 }
 
 func main() {
-	b := NewBroker[int]()
-	a := NewAdmin(b)
-	p := NewProducer(b)
-	c := NewConsumer(b)
-	c.Subscribe([]string{"users"})
-	a.CreateTopics([]string{"orders", "users"})
-	p.Send(ProducerRecord[int]{topic: "orders", value: 100})
+	broker := NewBroker()
+	broker.CreateTopic("orders", 2)
+	broker.Append("orders", 1, 123, 345)
+	broker.Append("orders", 1, 567, 678)
+
+	fmt.Println("hay", broker.topics)
+	consumer := NewConsumer(broker)
+	record1, ok1, err1 := consumer.Read("orders", 1)
+	record2, ok2, err2 := consumer.Read("orders", 1)
+	record3, ok3, err3 := consumer.Read("orders", 1)
+	consumer2 := NewConsumer(broker)
+	record4, ok4, err4 := consumer2.Read("orders", 1)
+	fmt.Println(record1, ok1, err1)
+	fmt.Println(record2, ok2, err2)
+	fmt.Println(record3, ok3, err3)
+	fmt.Println("4", record4, ok4, err4)
+	// consumer :=
 }
 
-func (a *Admin[T]) CreateTopics(names []string) error {
-	for _, name := range names {
-		_, exists := a.broker.topics[name]
-		if exists {
-			return fmt.Errorf("topic already exists")
-		} else {
-			a.broker.topics[name] = []Message[T]{}
-		}
-	}
-	return nil
-}
-
-type ProducerRecord[T any] struct {
-	topic string
-	value T
-}
-
-func (p *Producer[T]) Send(record ProducerRecord[T]) error {
-	if record.topic == "" {
-		return fmt.Errorf("topic must not be empty")
-	}
-	messages, exists := p.broker.topics[record.topic]
-	// default to 0 on first element
-	var nextOffset int
-	if len(messages) > 0 {
-		lastElement := messages[len(messages)-1]
-		nextOffset = lastElement.Offset + 1
-	}
+func (c *Consumer) Read(topicName string, partitionIndex int) (Record, bool, error) {
+	topic, exists := c.broker.topics[topicName]
 	if !exists {
-		return fmt.Errorf("topic does not exist")
-	} else {
-		p.broker.topics[record.topic] = append(messages, Message[T]{
-			Offset: nextOffset, Value: record.value,
-		})
+		return Record{}, false, fmt.Errorf("topic does not exist")
 	}
+
+	records := topic.Partitions[partitionIndex].Records
+	tp := TopicPartition{Topic: topicName, Partition: partitionIndex}
+	position := c.positions[tp]
+
+	if position >= len(records) {
+		return Record{}, false, nil
+	}
+
+	record := records[position]
+	c.positions[tp] = position + 1
+	return record, true, nil
+}
+
+func (b *Broker) Append(topicName string, partitionIndex, key, value int) (Record, error) {
+	topic, exists := b.topics[topicName]
+	if !exists {
+		return Record{}, fmt.Errorf("topic does not exist")
+	}
+	if partitionIndex < 0 {
+		return Record{}, fmt.Errorf("partition index out of range")
+	}
+	if partitionIndex >= len(b.topics[topicName].Partitions) {
+		return Record{}, fmt.Errorf("partition index out of range")
+	}
+	partition := topic.Partitions[partitionIndex]
+
+	offset := len(partition.Records)
+
+	newRecord := Record{Offset: offset, Value: value, Key: key}
+	partition.Records = append(partition.Records, newRecord)
+
+	return newRecord, nil
+}
+
+func (b *Broker) CreateTopic(name string, partitionCount int) error {
+	if name == "" {
+		return fmt.Errorf("name must not be empty")
+	}
+	_, exists := b.topics[name]
+	if exists {
+		return fmt.Errorf("topic already exists")
+	}
+	var partitions = []*Partition{}
+	var num int
+	for num < partitionCount {
+		partitions = append(partitions, &Partition{})
+		num++
+	}
+	b.topics[name] = &Topic{Partitions: partitions}
+
+	// proof that it worked correctly
+	// fmt.Println(len(b.topics[name].Partitions))
 	return nil
 }
-
-func (c *Consumer[T]) Subscribe(topics []string) {
-	for _, topic := range topics {
-		exists := slices.Contains(c.topicsSubscribed, topic)
-		if !exists {
-			c.topicsSubscribed = append(c.topicsSubscribed, topic)
-		}
-	}
-}
-
-// func (c *Consumer) Seek(partition TopicPartition, offset int) {}

@@ -263,25 +263,21 @@ func runABTest(ctx context.Context, config ledgerstress.Config, stdout, stderr i
 	}
 
 	fmt.Fprintln(stdout, "Results (lower is better for latency, pool wait, and lock waiters):")
-	fmt.Fprintf(stdout, "%-22s %8s %12s %12s %12s %16s %16s %18s\n", "Mode", "Grade", "Request RPS", "P95 ms", "P99 ms", "Pool wait/op", "Lock waiters", "Validation")
-	fmt.Fprintf(stdout, "%-22s %8s %12s %12s %12s %16s %16s %18s\n", "----------------------", "--------", "------------", "------------", "------------", "----------------", "----------------", "------------------")
+	fmt.Fprintf(stdout, "%-22s %12s %12s %12s %12s %16s %16s %18s\n", "Mode", "Request RPS", "P95 ms", "P99 ms", "Max ms", "Pool wait/op", "Lock waiters", "Validation")
+	fmt.Fprintf(stdout, "%-22s %12s %12s %12s %12s %16s %16s %18s\n", "----------------------", "------------", "------------", "------------", "------------", "----------------", "----------------", "------------------")
 
 	for i := range results {
 		result := &results[i]
-		grade := "-"
-		if result.summary.Performance.Grade != "" {
-			grade = fmt.Sprintf("%s/%d", result.summary.Performance.Grade, result.summary.Performance.Score)
-		}
 		validation := "healthy"
 		if !result.summary.Healthy {
 			validation = "FAILED"
 		}
-		fmt.Fprintf(stdout, "%-22s %8s %12.1f %12.2f %12.2f %16.2f %16d %18s\n",
+		fmt.Fprintf(stdout, "%-22s %12.1f %12.2f %12.2f %12.2f %16.2f %16d %18s\n",
 			result.label,
-			grade,
 			result.summary.Stats.OpsPerSecond,
 			result.summary.Stats.LatencyMS.P95,
 			result.summary.Stats.LatencyMS.P99,
+			result.summary.Stats.LatencyMS.Max,
 			result.summary.Performance.PoolWaitPerOpMS,
 			result.summary.Stats.MaxLockWaiters,
 			validation,
@@ -297,6 +293,7 @@ func runABTest(ctx context.Context, config ledgerstress.Config, stdout, stderr i
 		fmt.Fprintf(stdout, "  RPS:           %+0.1f/sec\n", results[1].summary.Stats.OpsPerSecond-results[0].summary.Stats.OpsPerSecond)
 		fmt.Fprintf(stdout, "  P95 latency:   %+0.2f ms\n", results[1].summary.Stats.LatencyMS.P95-results[0].summary.Stats.LatencyMS.P95)
 		fmt.Fprintf(stdout, "  P99 latency:   %+0.2f ms\n", results[1].summary.Stats.LatencyMS.P99-results[0].summary.Stats.LatencyMS.P99)
+		fmt.Fprintf(stdout, "  Max latency:   %+0.2f ms\n", results[1].summary.Stats.LatencyMS.Max-results[0].summary.Stats.LatencyMS.Max)
 		fmt.Fprintf(stdout, "  Pool wait/op:  %+0.2f ms\n", results[1].summary.Performance.PoolWaitPerOpMS-results[0].summary.Performance.PoolWaitPerOpMS)
 		fmt.Fprintf(stdout, "  Lock waiters:  %+d\n", results[1].summary.Stats.MaxLockWaiters-results[0].summary.Stats.MaxLockWaiters)
 	}

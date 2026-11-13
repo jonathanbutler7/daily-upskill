@@ -1,189 +1,92 @@
 # Ledger DB
 
-See [success criteria](docs/success-criteria.md) for the end state of this project.
+I built this project to learn double-entry bookkeeping and how a ledger records money movement. 
 
-## Local setup
+Stack:
+- Go
+- Postgres
 
-This project is using a local Homebrew Postgres install.
+## Focus 
 
-Connect as the admin user through the default `postgres` database:
+Keeping transfers correct and understanding how the database performs under concurrent load.
 
-```bash
-psql postgres
-```
+## What it does
 
-Create the local exercise role and database:
+Transfers between 
+1. accounts
+2. deposits
+3. withdrawals
+4. reversals
 
-```sql
-CREATE ROLE ledger_db WITH LOGIN PASSWORD 'password';
-CREATE DATABASE ledger_db OWNER ledger_db;
-```
+## Tables
 
-Connect as the app role:
+- external_transfers
+- ledger_accounts
+- ledger_transactions
+- ledger_entries
+- ledger_reversals
 
-```bash
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db"
-```
+one ledger transaction -> two balanced entries. 
 
-## Run schema migrations
+The balance checks, entries, and balance updates happen inside an atomic database transaction. If any step fails, the whole operation rolls back.
 
-Run these from the repo root:
 
-```bash
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/001_create_ledger_tables.sql
+## The hot-account problem
 
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/002_create_external_transfers.sql
+Deposits and withdrawals use a shared Cash Settlement account as the other side of the ledger entry. 
 
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/003_seed_system_accounts.sql
+In the synchronous path, every deposit and withdrawal updates that settlement account's balance. Postgres locks the row during the update, so concurrent operations have to wait for one another. Those operations hold database connections while waiting, which can also cause other requests to queue for an available connection.
 
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/006_prevent_entry_mutations.sql
+The ledger stays correct, but throughput drops and requests take longer.
 
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/007_settlement_outbox.sql
-```
+### Does it crash?
 
-The active application path posts through Go with `database/sql` transactions.
-Postgres owns durable storage, constraints, uniqueness, foreign keys, row locks,
-and transaction atomicity.
+Row contention usually causes waiting. Requests hold connections while waiting for the row lock. Once the connection pool is full, other requests wait for a connection too.
 
-The older PL/pgSQL posting functions are kept for the local SQL scenarios:
+If the wait exceeds a request's timeout, the operation fails. In this stress runner, each attempt has a 30-second timeout. Severe resource exhaustion can cause broader failures, but many workers accessing the same row doesn't automatically crash Postgres.
 
-```bash
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/004_create_post_transfer_function.sql
+## Sync vs deferred async
 
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/migrations/005_create_deposit_funds_function.sql
-```
+Both paths use atomic database transactions. The difference is when the stored Cash Settlement balance gets updated.
 
-```sql
-\i /Users/jonathanbutler/projects/daily-upskill/projects/ledger-db/db/migrations/004_create_post_transfer_function.sql
-```
+- Sync: write both ledger entries, update the customer balance, and update the settlement balance in one transaction.
+- Deferred async: write both ledger entries, update the customer balance, and add an outbox event in one transaction. A worker updates the settlement balance afterward.
 
-## Test `post_transfer`
+The worker commits the settlement balance update and marks the events processed in the same transaction. If that transaction rolls back, the events stay pending for retry.
 
-Load the simple Alice/Bob scenario:
+### Batching
 
-```bash
-psql "postgresql://ledger_db:password@localhost:5432/ledger_db" \
-  -f projects/ledger-db/db/scenarios/001_alice_sends_bob.sql
-```
+The worker reads up to 100 pending events at a time. It sums their changes and updates each settlement account once per batch. This reduces how often it needs to update the shared row.
 
-Or call the function manually inside `psql`:
+### Backlog tradeoff
 
-```sql
-select deposit_funds(2, 2000, 'ach', 'manual-deposit-ext-1', 'manual-deposit-1');
-select post_transfer(2, 3, 1000, 'test-1');
+The customer balance and ledger entries are current when the request commits. The stored settlement balance can lag behind them.
 
-select * from ledger_accounts;
-select * from ledger_transactions order by id;
-select * from ledger_entries order by id;
-```
+If the worker stops or can't keep up, pending events accumulate. We need to monitor how many are pending and how old the oldest event is. The settlement balance catches up as the worker processes the backlog.
 
-What this has proved so far:
+## Testing under load
 
-- Empty tables fail with `from account not found`.
-- A deposit posts balanced entries against `Cash Settlement`.
-- A valid transfer moves balance from one account to another.
-- Ledger entries are created with equal and opposite amounts.
-- Insufficient funds fails before moving money.
-- Reusing the same idempotency key with the same request returns the original transaction.
-- Reusing the same idempotency key with a different request fails.
-
-## Validate ledger state
-
-The read-only validator audits committed ledger state without calling the write
-path. It checks posted transaction balances, stored balances versus derived
-balances, transaction entry shape, external transfer links, reversals, and
-non-posted transaction rows.
+Good run
 
 ```bash
-curl http://localhost:8080/validation
+go run ./cmd/stress -accounts=5 -workers=2 -operations=50
 ```
 
-The endpoint returns `200 OK` when validation runs. Use the JSON
-`healthy` field to decide whether the ledger state passed the audit.
-
-## Run a local stress test
-
-The local stress runner resets the schema by default, seeds accounts, runs
-concurrent ledger operations with randomized worker pacing, prints a live
-terminal dashboard, and finishes with validator output.
+Bad run
 
 ```bash
-go run ./cmd/stress -accounts=5 -workers=2 -operations=50 -think-min=50ms -think-max=250ms
+go run ./cmd/stress -accounts=10 -workers=200 -operations=50
 ```
-
-See [stress test plan](docs/stress-test.md) for the runner shape and visibility
-fields.
-
-## Deferred settlement worker
-
-External transfers with `SettlementBalanceModeDeferredAsync` commit the user
-balance and both ledger entries immediately. Each deferred settlement entry gets
-a `ledger.settlement_balance.requested` outbox row. A Go processor applies those
-entries to the stored settlement balance in batches of up to 100.
 
 ```bash
-go run ./cmd/settlement-worker
+LEDGER_DB_DSN='postgresql://ledger_db:password@localhost:5432/ledger_db_interview_stress' \
+go run ./cmd/stress \
+  -ab-test \
+  -accounts=500 \
+  -workers=150 \
+  -operations=10000 \
+  -max-open-conns=50 \
+  -external-transfer-percent=90 \
+  -think-min=1ms \
+  -think-max=1ms
 ```
-
-The worker uses `LEDGER_DB_DSN` (with the same local default as the stress runner),
-one work connection and one dedicated `LISTEN` connection. `NOTIFY` wakes it after
-the posting transaction commits. It also drains on startup/reconnect and polls
-every second. A failed batch rolls back and remains pending for retry; errors
-are logged. The balance update and `processed_at` marker commit together, and a
-unique index prevents two work rows for the same settlement entry.
-
-Reversals inherit the original entry's settlement mode. Pending work can be
-applied out of order, so the stored settlement balance can temporarily be
-negative. The worker applies entries already authorized by the synchronous user
-balance checks. During processing, stored settlement balance plus pending deltas
-must equal the ledger-derived balance; after draining, the balances must match
-exactly.
-
-`go run ./cmd/stress -ab-test` starts and stops its own processor for the deferred
-run. The command resets the schema, so stop standalone processors before running
-it. Migration 007 adds the new work type; historical `ledger.transaction.posted`
-rows do not identify which updates were deferred and are not backfilled.
-
-## Run Go tests
-
-Run the normal test suite from this directory:
-
-```bash
-GOCACHE=/private/tmp/ledger-db-go-build-cache go test ./...
-```
-
-The SQL scenarios also have Go integration-test versions. They reset the local
-ledger tables and apply the immutability migration, so run them only against a
-throwaway local database:
-
-```bash
-LEDGER_DB_INTEGRATION=1 GOCACHE=/private/tmp/ledger-db-go-build-cache go test ./cmd
-```
-
-Set `LEDGER_DB_DSN` if you want to use a database other than:
-
-```text
-postgresql://ledger_db:password@localhost:5432/ledger_db
-```
-
-## Boundaries
-
-- Postgres owns 
-  - validation of current db state before initiating transfer
-  - locking
-  - atomic write
-  - idempotency constraint
-
-- Application code owns 
-  - API shape
-  - request parsing
-  - retries
-  - error mapping
-  - tests

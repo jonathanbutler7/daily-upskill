@@ -15,7 +15,7 @@ I meet **two of the three** P3-II evidence anchors in the [career guide](./caree
 
 | When | Example | What I did | What other people did with it | Anchor |
 | :--- | :--- | :--- | :--- | :--- |
-| [TODO: month] | **Surcharge Calculator** | Turned surcharge rules into a calculator anyone could use | Support used it to check whether customer calls were real bugs. It spread to Slack channels I never shared it in. Product used it to check the math. | Cross-team |
+| [TODO: month] | **Surcharge Calculator** | Turned surcharge rules into a calculator anyone could use | Support used it to check whether customer calls were real bugs. It spread to Slack channels I never shared it in. Product used it to check the math. T2 now troubleshoots surcharge issues without escalating ([TODO: name, role]). | Cross-team |
 | Aug | **CareCredit status mapping** | Audited how the UI showed statuses and wrote the CareCredit → Weave status mapping | Product, Design, and Engineering stopped going in circles after weeks. The audit found frontend bugs nobody knew about. | Cross-team |
 | Sep | **CareCredit demo for Sales** | Proposed shipping a request-intercepted demo now and deferring full data seeding | Sales runs live CareCredit demos using a guide I wrote with Cassidy Kelch. BI reporting stays clean. | Cross-team |
 | Sep | **QuickScreen caching** | Built the proof of concept that set the caching approach | Jan shipped the 60-day production cache using that approach | Adopted pattern |
@@ -65,7 +65,8 @@ Everything below is supporting detail for the summary above.
 - **What I did:** Built the [Surcharge Calculator](https://docs.google.com/spreadsheets/d/1pbEGxKuHuCOpynu1qqQF9gZ1F91fx-o-oY0YTV4TbFI/edit?gid=92512368#gid=92512368), which documents how a surcharge gets determined.
 - **What others did:** Support used it on customer calls and shared it in channels beyond the ones I posted in. Product used it to check the math.
 - **Result:** Support could tell a real surcharge bug from expected behavior before escalating to Engineering.
-- **Evidence:** Slack screenshots of unprompted use. [TODO: attach]
+- **Evidence:** "It's been extremely useful for my team and T2's. I've had a lot [less] inquiries make it my way because T2 is able [to] troubleshoot surcharge calculations precisely due to the calculator. It reduces a lot of time I used to spend on surcharge issues." — [TODO: name, role]. [TODO: escalations per month before vs. after]
+- **Also:** Slack screenshots of unprompted use. [TODO: attach]
 
 ### CareCredit demo environment for Sales (September)
 - **Problem:** Sales needed live CareCredit demos. A full seeded-data platform would have taken months.

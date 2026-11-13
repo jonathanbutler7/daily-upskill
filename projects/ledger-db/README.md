@@ -17,6 +17,7 @@ Transfers between
 2. deposits
 3. withdrawals
 4. reversals
+5. idempotency
 
 ## Tables
 
@@ -35,28 +36,24 @@ The balance checks, entries, and balance updates happen inside an atomic databas
 
 Deposits and withdrawals use a shared Cash Settlement account as the other side of the ledger entry. 
 
-In the synchronous path, every deposit and withdrawal updates that settlement account's balance. Postgres locks the row during the update, so concurrent operations have to wait for one another. Those operations hold database connections while waiting, which can also cause other requests to queue for an available connection.
+In the synchronous path, every deposit and withdrawal updates that settlement account's balance. 
+
+Postgres locks the row during the update, so concurrent operations have to wait for one another. Those operations hold database connections while waiting, which can also cause other requests to queue for an available connection.
 
 The ledger stays correct, but throughput drops and requests take longer.
 
-### Does it crash?
-
-Row contention usually causes waiting. Requests hold connections while waiting for the row lock. Once the connection pool is full, other requests wait for a connection too.
-
-If the wait exceeds a request's timeout, the operation fails. In this stress runner, each attempt has a 30-second timeout. Severe resource exhaustion can cause broader failures, but many workers accessing the same row doesn't automatically crash Postgres.
-
 ## Sync vs deferred async
 
-Both paths use atomic database transactions. The difference is when the stored Cash Settlement balance gets updated.
+Both paths use atomic database transactions. 
 
-- Sync: write both ledger entries, update the customer balance, and update the settlement balance in one transaction.
-- Deferred async: write both ledger entries, update the customer balance, and add an outbox event in one transaction. A worker updates the settlement balance afterward.
+- Sync: update the settlement balance in one transaction
+- Deferred async: add an outbox event in one transaction. A worker updates the settlement balance afterward.
 
 The worker commits the settlement balance update and marks the events processed in the same transaction. If that transaction rolls back, the events stay pending for retry.
 
 ### Batching
 
-The worker reads up to 100 pending events at a time. It sums their changes and updates each settlement account once per batch. This reduces how often it needs to update the shared row.
+The worker reads up to 100 pending events at a time. It sums their changes and updates each settlement account once per batch. 
 
 ### Backlog tradeoff
 
